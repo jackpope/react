@@ -11,12 +11,14 @@
 
 describe('ReactDOMComponentTree', () => {
   let React;
-  let ReactDOM;
+  let ReactDOMClient;
   let container;
+  let act;
 
   beforeEach(() => {
     React = require('react');
-    ReactDOM = require('react-dom');
+    ReactDOMClient = require('react-dom/client');
+    act = require('internal-test-utils').act;
     container = document.createElement('div');
     document.body.appendChild(container);
   });
@@ -26,7 +28,7 @@ describe('ReactDOMComponentTree', () => {
     container = null;
   });
 
-  it('finds nodes for instances on events', () => {
+  it('finds nodes for instances on events', async () => {
     const mouseOverID = 'mouseOverID';
     const clickID = 'clickID';
     let currentTargetID = null;
@@ -55,7 +57,10 @@ describe('ReactDOMComponentTree', () => {
     }
 
     const component = <Component />;
-    ReactDOM.render(component, container);
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => {
+      root.render(component);
+    });
     expect(currentTargetID).toBe(null);
     simulateMouseEvent(document.getElementById(mouseOverID), 'mouseover');
     expect(currentTargetID).toBe(mouseOverID);
@@ -63,7 +68,7 @@ describe('ReactDOMComponentTree', () => {
     expect(currentTargetID).toBe(clickID);
   });
 
-  it('finds closest instance for node when an event happens', () => {
+  it('finds closest instance for node when an event happens', async () => {
     const nonReactElemID = 'aID';
     const innerHTML = {__html: `<div id="${nonReactElemID}"></div>`};
     const closestInstanceID = 'closestInstance';
@@ -92,13 +97,16 @@ describe('ReactDOMComponentTree', () => {
     }
 
     const component = <ClosestInstance />;
-    ReactDOM.render(<section>{component}</section>, container);
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => {
+      root.render(<section>{component}</section>);
+    });
     expect(currentTargetID).toBe(null);
     simulateClick(document.getElementById(nonReactElemID));
     expect(currentTargetID).toBe(closestInstanceID);
   });
 
-  it('updates event handlers from fiber props', () => {
+  it('updates event handlers from fiber props', async () => {
     let action = '';
     let instance;
     const handlerA = () => (action = 'A');
@@ -126,21 +134,27 @@ describe('ReactDOMComponentTree', () => {
       }
     }
 
-    ReactDOM.render(
-      <HandlerFlipper key="1" ref={n => (instance = n)} />,
-      container,
-    );
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => {
+      root.render(<HandlerFlipper key="1" ref={n => (instance = n)} />);
+    });
     const node = container.firstChild;
-    simulateMouseOver(node);
+    await act(() => {
+      simulateMouseOver(node);
+    });
     expect(action).toEqual('A');
     action = '';
     // Render with the other event handler.
-    instance.flip();
-    simulateMouseOver(node);
+    await act(() => {
+      instance.flip();
+    });
+    await act(() => {
+      simulateMouseOver(node);
+    });
     expect(action).toEqual('B');
   });
 
-  it('finds a controlled instance from node and gets its current fiber props', () => {
+  it('finds a controlled instance from node and gets its current fiber props', async () => {
     const inputID = 'inputID';
     const startValue = undefined;
     const finishValue = 'finish';
@@ -176,8 +190,12 @@ describe('ReactDOMComponentTree', () => {
     }
 
     const component = <Controlled />;
-    const instance = ReactDOM.render(component, container);
-    expect(() => simulateInput(instance.a, finishValue)).toErrorDev(
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => {
+      root.render(component);
+    });
+    const inputElem = document.getElementById(inputID);
+    expect(() => simulateInput(inputElem, finishValue)).toErrorDev(
       'Warning: A component is changing an uncontrolled input to be controlled. ' +
         'This is likely caused by the value changing from undefined to ' +
         'a defined value, which should not happen. ' +
