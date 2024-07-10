@@ -81,7 +81,11 @@ import {
   ContinuousEventPriority,
   higherEventPriority,
 } from './ReactEventPriorities';
-import {readContext, checkIfContextChanged} from './ReactFiberNewContext';
+import {
+  readContext,
+  readContextWithSelector,
+  checkIfContextChanged,
+} from './ReactFiberNewContext';
 import {HostRoot, CacheComponent, HostComponent} from './ReactWorkTags';
 import {
   LayoutStatic as LayoutStaticEffect,
@@ -1051,6 +1055,19 @@ function updateWorkInProgressHook(): Hook {
     }
   }
   return workInProgressHook;
+}
+
+function useContext<T>(
+  context: ReactContext<T>,
+  options?: {unstable_selector?: T => mixed},
+): T {
+  if (options !== undefined) {
+    const selector = options.unstable_selector;
+    if (selector !== undefined) {
+      return readContextWithSelector(context, selector);
+    }
+  }
+  return readContext(context);
 }
 
 // NOTE: defining two versions of this function to avoid size impact when this feature is disabled.
@@ -3695,7 +3712,7 @@ const HooksDispatcherOnMount: Dispatcher = {
 
   use,
   useCallback: mountCallback,
-  useContext: readContext,
+  useContext: useContext,
   useEffect: mountEffect,
   useImperativeHandle: mountImperativeHandle,
   useLayoutEffect: mountLayoutEffect,
@@ -3734,7 +3751,7 @@ const HooksDispatcherOnUpdate: Dispatcher = {
 
   use,
   useCallback: updateCallback,
-  useContext: readContext,
+  useContext: useContext,
   useEffect: updateEffect,
   useImperativeHandle: updateImperativeHandle,
   useInsertionEffect: updateInsertionEffect,
@@ -3773,7 +3790,7 @@ const HooksDispatcherOnRerender: Dispatcher = {
 
   use,
   useCallback: updateCallback,
-  useContext: readContext,
+  useContext: useContext,
   useEffect: updateEffect,
   useImperativeHandle: updateImperativeHandle,
   useInsertionEffect: updateInsertionEffect,
@@ -3845,10 +3862,13 @@ if (__DEV__) {
       checkDepsAreArrayDev(deps);
       return mountCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       mountHookTypesDev();
-      return readContext(context);
+      return useContext(context, options);
     },
     useEffect(
       create: () => (() => void) | void,
@@ -4030,10 +4050,13 @@ if (__DEV__) {
       updateHookTypesDev();
       return mountCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       updateHookTypesDev();
-      return readContext(context);
+      return useContext(context, options);
     },
     useEffect(
       create: () => (() => void) | void,
@@ -4211,10 +4234,13 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       updateHookTypesDev();
-      return readContext(context);
+      return useContext(context);
     },
     useEffect(
       create: () => (() => void) | void,
@@ -4391,10 +4417,13 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       updateHookTypesDev();
-      return readContext(context);
+      return useContext(context, options);
     },
     useEffect(
       create: () => (() => void) | void,
@@ -4576,11 +4605,14 @@ if (__DEV__) {
       mountHookTypesDev();
       return mountCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       warnInvalidHookAccess();
       mountHookTypesDev();
-      return readContext(context);
+      return useContext(context, options);
     },
     useEffect(
       create: () => (() => void) | void,
@@ -4782,11 +4814,14 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       warnInvalidHookAccess();
       updateHookTypesDev();
-      return readContext(context);
+      return useContext(context, options);
     },
     useEffect(
       create: () => (() => void) | void,
@@ -4988,11 +5023,14 @@ if (__DEV__) {
       updateHookTypesDev();
       return updateCallback(callback, deps);
     },
-    useContext<T>(context: ReactContext<T>): T {
+    useContext<T>(
+      context: ReactContext<T>,
+      options?: {unstable_selector?: T => mixed},
+    ): T {
       currentHookNameInDev = 'useContext';
       warnInvalidHookAccess();
       updateHookTypesDev();
-      return readContext(context);
+      return useContext(context, options);
     },
     useEffect(
       create: () => (() => void) | void,

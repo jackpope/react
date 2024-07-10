@@ -70,7 +70,7 @@ if (__DEV__) {
 }
 
 let currentlyRenderingFiber: Fiber | null = null;
-let lastContextDependency: ContextDependency<mixed> | null = null;
+let lastContextDependency: ContextDependency<mixed, mixed> | null = null;
 let lastFullyObservedContext: ReactContext<any> | null = null;
 
 let isDisallowedContextReadInDEV: boolean = false;
@@ -400,8 +400,19 @@ function propagateContextChanges<T>(
         findContext: for (let i = 0; i < contexts.length; i++) {
           const context: ReactContext<T> = contexts[i];
           // Check if the context matches.
-          // TODO: Compare selected values to bail out early.
           if (dependency.context === context) {
+            const selector = dependency.selector;
+            if (selector != null) {
+              const newValue = isPrimaryRenderer
+                ? dependency.context._currentValue
+                : dependency.context._currentValue2;
+              const newSelectedValue = selector(newValue);
+              const oldSelectedValue = dependency.selectedValue;
+              if (is(oldSelectedValue, newSelectedValue)) {
+                // Selected value hasn't changed. Bail out early.
+                continue findContext;
+              }
+            }
             // Match! Schedule an update on this fiber.
 
             // In the lazy implementation, don't mark a dirty flag on the
@@ -659,8 +670,16 @@ export function checkIfContextChanged(
       ? context._currentValue
       : context._currentValue2;
     const oldValue = dependency.memoizedValue;
-    if (!is(newValue, oldValue)) {
-      return true;
+    const selector = dependency.selector;
+    if (selector != null) {
+      const oldSelectedValue = dependency.selectedValue;
+      if (!is(selector(newValue), oldSelectedValue)) {
+        return true;
+      }
+    } else {
+      if (!is(newValue, oldValue)) {
+        return true;
+      }
     }
     dependency = dependency.next;
   }
@@ -694,6 +713,17 @@ export function prepareToReadContext(
   }
 }
 
+export function readContextWithSelector<C, S>(
+  context: ReactContext<C>,
+  selector: C => S,
+): C {
+  if (!enableLazyContextPropagation) {
+    return (null: any);
+  }
+
+  return readContextForConsumer(currentlyRenderingFiber, context, selector);
+}
+
 export function readContext<T>(context: ReactContext<T>): T {
   if (__DEV__) {
     // This warning would fire if you read context inside a Hook like useMemo.
@@ -721,10 +751,13 @@ export function readContextDuringReconciliation<T>(
   return readContextForConsumer(consumer, context);
 }
 
-function readContextForConsumer<T>(
+type ContextSelector<C, S> = C => S;
+
+function readContextForConsumer<C, S>(
   consumer: Fiber | null,
-  context: ReactContext<T>,
-): T {
+  context: ReactContext<C>,
+  selector?: (C => S) | null,
+): C {
   const value = isPrimaryRenderer
     ? context._currentValue
     : context._currentValue2;
@@ -734,7 +767,12 @@ function readContextForConsumer<T>(
   } else {
     const contextItem = {
       context: ((context: any): ReactContext<mixed>),
+      selector: ((selector: any): ContextSelector<mixed, mixed> | null),
       memoizedValue: value,
+      // TODO: If useContextSelector becomes a built-in API, then
+      // readContextWithSelector should return the selected value so that we
+      // don't call the selector twice. Will need to inline readContextImpl.
+      selectedValue: selector != null ? selector(value) : null,
       next: null,
     };
 
