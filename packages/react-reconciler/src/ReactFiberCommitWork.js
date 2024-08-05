@@ -1076,6 +1076,7 @@ function commitLayoutEffectOnFiber(
   finishedWork: Fiber,
   committedLanes: Lanes,
 ): void {
+  console.log('commitLayoutEffectOnFiber');
   // When updating this function, also update reappearLayoutEffects, which does
   // most of the same things when an offscreen tree goes from hidden -> visible.
   const flags = finishedWork.flags;
@@ -2393,6 +2394,7 @@ function commitSuspenseHydrationCallbacks(
 function getRetryCache(finishedWork: Fiber) {
   // TODO: Unify the interface for the retry cache so we don't have to switch
   // on the tag like this.
+  console.log('retry cache');
   switch (finishedWork.tag) {
     case SuspenseComponent:
     case SuspenseListComponent: {
@@ -2580,6 +2582,7 @@ function commitMutationEffectsOnFiber(
   root: FiberRoot,
   lanes: Lanes,
 ) {
+  console.log('commitMutationEffectsOnFiber');
   const current = finishedWork.alternate;
   const flags = finishedWork.flags;
 
@@ -3311,6 +3314,7 @@ export function reappearLayoutEffects(
   // node was reused.
   includeWorkInProgressEffects: boolean,
 ) {
+  console.log('reappearLayoutEffects');
   // Turn on layout effects in a tree that previously disappeared.
   const flags = finishedWork.flags;
   switch (finishedWork.tag) {
@@ -4572,6 +4576,7 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
   current: Fiber,
   nearestMountedAncestor: Fiber | null,
 ): void {
+  console.log('commitPassiveUnmountInsideDeletedTreeonFiber');
   switch (current.tag) {
     case FunctionComponent:
     case ForwardRef:

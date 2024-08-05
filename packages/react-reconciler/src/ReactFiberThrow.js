@@ -26,6 +26,7 @@ import {
   SimpleMemoComponent,
   SuspenseComponent,
   OffscreenComponent,
+  ErrorBoundaryComponent,
 } from './ReactWorkTags';
 import {
   DidCapture,
@@ -36,6 +37,7 @@ import {
   ForceUpdateForLegacySuspense,
   ForceClientRender,
   ScheduleRetry,
+  ContentReset,
 } from './ReactFiberFlags';
 import {NoMode, ConcurrentMode, DebugTracingMode} from './ReactTypeOfMode';
 import {
@@ -52,6 +54,7 @@ import {
   CaptureUpdate,
   ForceUpdate,
   enqueueUpdate,
+  initializeUpdateQueue,
 } from './ReactFiberClassUpdateQueue';
 import {markFailedErrorBoundaryForHotReloading} from './ReactFiberHotReloading';
 import {
@@ -67,6 +70,8 @@ import {
   attachPingListener,
   restorePendingUpdaters,
   renderDidSuspend,
+  scheduleUpdateOnFiber,
+  getWorkInProgressRoot,
 } from './ReactFiberWorkLoop';
 import {propagateParentContextChangesToDeferredTree} from './ReactFiberNewContext';
 import {logUncaughtError, logCaughtError} from './ReactFiberErrorLogger';
@@ -89,6 +94,11 @@ import {noopSuspenseyCommitThenable} from './ReactFiberThenable';
 import {REACT_POSTPONE_TYPE} from 'shared/ReactSymbols';
 import {runWithFiberInDEV} from './ReactCurrentFiber';
 import {callComponentDidCatchInDEV} from './ReactFiberCallUserSpace';
+import {
+  enqueueConcurrentHookUpdate,
+  enqueueConcurrentRenderForLane,
+} from './ReactFiberConcurrentUpdates';
+import {renderWithHooks} from './ReactFiberHooks';
 
 function createRootErrorUpdate(
   root: FiberRoot,
@@ -115,6 +125,38 @@ function createClassErrorUpdate(lane: Lane): Update<mixed> {
   const update = createUpdate(lane);
   update.tag = CaptureUpdate;
   return update;
+}
+
+function initializeErrorBoundaryUpdate(
+  update: Update<mixed>,
+  root: FiberRoot,
+  fiber: Fiber,
+  errorInfo: CapturedValue<mixed>,
+) {
+  const onError = fiber.memoizedProps.onError;
+  if (typeof onError === 'function') {
+    const error = errorInfo.value;
+    update.payload = () => {
+      console.log('payload!');
+      return onError(error);
+    };
+    update.callback = () => {
+      if (__DEV__) {
+        markFailedErrorBoundaryForHotReloading(fiber);
+      }
+      if (__DEV__) {
+        runWithFiberInDEV(
+          errorInfo.source,
+          logCaughtError,
+          root,
+          fiber,
+          errorInfo,
+        );
+      } else {
+        logCaughtError(root, fiber, errorInfo);
+      }
+    };
+  }
 }
 
 function initializeClassErrorUpdate(
@@ -665,6 +707,7 @@ function throwException(
         return false;
       }
       case ClassComponent:
+        console.log('get error at reactfiberthrow -- class component');
         // Capture and retry
         const ctor = workInProgress.type;
         const instance = workInProgress.stateNode;
@@ -675,6 +718,7 @@ function throwException(
               typeof instance.componentDidCatch === 'function' &&
               !isAlreadyFailedLegacyErrorBoundary(instance)))
         ) {
+          console.log('Class error boundary should capture!');
           workInProgress.flags |= ShouldCapture;
           const lane = pickArbitraryLane(rootRenderLanes);
           workInProgress.lanes = mergeLanes(workInProgress.lanes, lane);
@@ -682,6 +726,51 @@ function throwException(
           const update = createClassErrorUpdate(lane);
           initializeClassErrorUpdate(update, root, workInProgress, errorInfo);
           enqueueCapturedUpdate(workInProgress, update);
+          return false;
+        }
+        break;
+      case ErrorBoundaryComponent:
+        console.log('get error at ErrorBoundaryComponent');
+        // Capture and retry
+        if ((workInProgress.flags & DidCapture) === NoFlags) {
+          console.log('ErrorBoundaryComponent should capture!');
+          workInProgress.flags |= ShouldCapture;
+          const lane = pickArbitraryLane(rootRenderLanes);
+          workInProgress.lanes = mergeLanes(workInProgress.lanes, lane);
+          // Schedule the error boundary to re-render ??
+          const root = getWorkInProgressRoot();
+          if (root) {
+            // const update = {
+            //   lane,
+            //   revertLane: lane,
+            //   action: () => {console.log('action')},
+            //   hasEagerState: false,
+            //   eagerState: null,
+            //   next:
+            // }
+            const update = createClassErrorUpdate(lane);
+            initializeErrorBoundaryUpdate(
+              update,
+              root,
+              workInProgress,
+              errorInfo,
+            );
+            // const root = enqueueUpdate(workInProgress, update, lane);
+            enqueueCapturedUpdate(workInProgress, update);
+            // renderWithHooks(
+            //   null,
+            //   workInProgress,
+            //   () => {
+            //     console.log('render func');
+            //   },
+            //   {},
+            //   null,
+            //   workInProgress.lanes,
+            // );
+            // if (root) {
+            // scheduleUpdateOnFiber(root, workInProgress, lane);
+            // }
+          }
           return false;
         }
         break;

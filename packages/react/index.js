@@ -37,6 +37,7 @@ export {
   PureComponent,
   StrictMode,
   Suspense,
+  ErrorBoundary,
   cloneElement,
   createContext,
   createElement,

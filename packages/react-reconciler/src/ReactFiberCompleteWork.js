@@ -73,6 +73,7 @@ import {
   CacheComponent,
   TracingMarkerComponent,
   Throw,
+  ErrorBoundaryComponent,
 } from './ReactWorkTags';
 import {NoMode, ConcurrentMode, ProfileMode} from './ReactTypeOfMode';
 import {
@@ -90,6 +91,7 @@ import {
   MaySuspendCommit,
   ScheduleRetry,
   ShouldSuspendCommit,
+  ShouldCapture,
 } from './ReactFiberFlags';
 
 import {
@@ -1808,6 +1810,22 @@ function completeWork(
         // Only Legacy Mode completes an errored node.
         return null;
       }
+    }
+    case ErrorBoundaryComponent: {
+      const didCapture = (workInProgress.flags & DidCapture) !== NoFlags;
+      console.log('complete work on errorboundarycomponent', {didCapture});
+      if (didCapture) {
+        workInProgress.lanes = renderLanes;
+        return workInProgress;
+        // workInProgress.stateNode = {
+        //   showFallback: true,
+        // };
+        // markUpdate(workInProgress);
+        // console.log('complete work');
+        // return workInProgress;
+      }
+      bubbleProperties(workInProgress);
+      return null;
     }
   }
 

@@ -589,6 +589,7 @@ function skipPastDehydratedSuspenseInstance(
 }
 
 function popToNextHostParent(fiber: Fiber): void {
+  console.log('poptonexthostparent');
   hydrationParentFiber = fiber.return;
   while (hydrationParentFiber) {
     switch (hydrationParentFiber.tag) {

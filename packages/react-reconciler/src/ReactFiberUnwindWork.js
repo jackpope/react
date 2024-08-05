@@ -28,6 +28,7 @@ import {
   LegacyHiddenComponent,
   CacheComponent,
   TracingMarkerComponent,
+  ErrorBoundaryComponent,
 } from './ReactWorkTags';
 import {DidCapture, NoFlags, ShouldCapture} from './ReactFiberFlags';
 import {NoMode, ProfileMode} from './ReactTypeOfMode';
@@ -65,6 +66,7 @@ function unwindWork(
   workInProgress: Fiber,
   renderLanes: Lanes,
 ): Fiber | null {
+  console.log('unwind work');
   // Note: This intentionally doesn't check if we're hydrating because comparing
   // to the current tree provider fiber is just as fast and less error-prone.
   // Ideally we would have a special version of the work loop only
@@ -121,6 +123,16 @@ function unwindWork(
     case HostComponent: {
       // TODO: popHydrationState
       popHostContext(workInProgress);
+      return null;
+    }
+    case ErrorBoundaryComponent: {
+      console.log('unwindw - error boundary component');
+      const flags = workInProgress.flags;
+      if (flags & ShouldCapture) {
+        console.log('should capture in unwind works');
+        workInProgress.flags = (flags & ~ShouldCapture) | DidCapture;
+        return workInProgress;
+      }
       return null;
     }
     case SuspenseComponent: {

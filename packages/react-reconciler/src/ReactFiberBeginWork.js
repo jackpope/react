@@ -73,6 +73,7 @@ import {
   CacheComponent,
   TracingMarkerComponent,
   Throw,
+  ErrorBoundaryComponent,
 } from './ReactWorkTags';
 import {
   NoFlags,
@@ -3863,6 +3864,7 @@ function beginWork(
   workInProgress: Fiber,
   renderLanes: Lanes,
 ): Fiber | null {
+  console.log('begin work', Object.keys(workInProgress.memoizedProps ?? {}));
   if (__DEV__) {
     if (workInProgress._debugNeedsRemount && current !== null) {
       // This will restart the begin phase with a new fiber.
@@ -4150,12 +4152,93 @@ function beginWork(
       // So we'll rethrow here. This might be a Thenable.
       throw workInProgress.pendingProps;
     }
+    case ErrorBoundaryComponent: {
+      console.log('begin work on errorboundarycomponent');
+      const Component = workInProgress.type;
+      const unresolvedProps = workInProgress.pendingProps;
+      const resolvedProps =
+        disableDefaultPropsExceptForClasses ||
+        workInProgress.elementType === Component
+          ? unresolvedProps
+          : resolveDefaultPropsOnNonClassComponent(Component, unresolvedProps);
+      initializeUpdateQueue(workInProgress);
+      return updateErrorBoundaryComponent(current, workInProgress, renderLanes);
+    }
   }
 
   throw new Error(
     `Unknown unit of work tag (${workInProgress.tag}). This error is likely caused by a bug in ` +
       'React. Please file an issue.',
   );
+}
+
+function updateErrorBoundaryComponent(
+  current: null | Fiber,
+  workInProgress: Fiber,
+  renderLanes: Lanes,
+) {
+  const nextProps = workInProgress.pendingProps;
+  // const nextPrimaryChildren = nextProps.children;
+  // const nextFallbackChildren = nextProps.fallback;
+  let showFallback = false;
+  const didCatch = (workInProgress.flags & DidCapture) !== NoFlags;
+  if (didCatch) {
+    showFallback = true;
+    workInProgress.flags &= ~DidCapture;
+  }
+  console.log('updateErrorBoundarycomponent', {showFallback});
+  const nextPrimaryChildren = nextProps.children;
+  const nextFallbackChildren = nextProps.fallback;
+  if (showFallback) {
+    // const fallbackFragment = mountSuspenseFallbackChildren(
+    //   workInProgress,
+    //   nextPrimaryChildren,
+    //   nextFallbackChildren,
+    //   renderLanes,
+    // );
+    // const primaryChildFragment: Fiber = (workInProgress.child: any);
+    // // primaryChildFragment.memoizedState =
+    // //   mountSuspenseOffscreenState(renderLanes);
+    // primaryChildFragment.childLanes = getRemainingWorkInPrimaryTree(
+    //   current,
+    //   false,
+    //   renderLanes,
+    // );
+    // TODO: figure out state / markers here
+    // workInProgress.memoizedState = SUSPENDED_MARKER;
+    // const fallbackChildFragment = createFiberFromFragment(
+    //   nextFallbackChildren,
+    //   ConcurrentMode,
+    //   renderLanes,
+    //   null,
+    // );
+    // fallbackChildFragment.memoizedProps = {a: 'a'};
+    console.log('SHOW FALLBACK NOW!');
+    // Mounting here goes into an infinite render loop!
+    const fallbackFragment = mountSuspenseFallbackChildren(
+      workInProgress,
+      nextPrimaryChildren,
+      nextFallbackChildren,
+      renderLanes,
+    );
+    const primaryChildFragment: Fiber = (workInProgress.child: any);
+    primaryChildFragment.memoizedState =
+      mountSuspenseOffscreenState(renderLanes);
+    primaryChildFragment.childLanes = getRemainingWorkInPrimaryTree(
+      current,
+      false,
+      renderLanes,
+    );
+    return fallbackFragment;
+    // ?? Returning here renders the fragment, but doesn't commit it in place of the children?
+    // return fallbackChildFragment;
+  } else {
+    return mountSuspensePrimaryChildren(
+      workInProgress,
+      nextPrimaryChildren,
+      renderLanes,
+    );
+  }
 }
 
 export {beginWork};

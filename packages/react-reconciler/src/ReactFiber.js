@@ -67,6 +67,7 @@ import {
   LegacyHiddenComponent,
   TracingMarkerComponent,
   Throw,
+  ErrorBoundaryComponent,
 } from './ReactWorkTags';
 import {OffscreenVisible} from './ReactFiberActivityComponent';
 import {getComponentNameFromOwner} from 'react-reconciler/src/getComponentNameFromFiber';
@@ -114,6 +115,7 @@ import {getHostContext} from './ReactFiberHostContext';
 import type {ReactComponentInfo} from '../../shared/ReactTypes';
 import isArray from 'shared/isArray';
 import getComponentNameFromType from 'shared/getComponentNameFromType';
+import {REACT_ERROR_BOUNDARY_TYPE} from '../../shared/ReactSymbols';
 
 export type {Fiber};
 
@@ -572,8 +574,8 @@ export function createFiberFromTypeAndProps(
       fiberTag = isHostHoistableType(type, pendingProps, hostContext)
         ? HostHoistable
         : isHostSingletonType(type)
-          ? HostSingleton
-          : HostComponent;
+        ? HostSingleton
+        : HostComponent;
     } else if (supportsResources) {
       const hostContext = getHostContext();
       fiberTag = isHostHoistableType(type, pendingProps, hostContext)
@@ -610,6 +612,8 @@ export function createFiberFromTypeAndProps(
         return createFiberFromSuspenseList(pendingProps, mode, lanes, key);
       case REACT_OFFSCREEN_TYPE:
         return createFiberFromOffscreen(pendingProps, mode, lanes, key);
+      case REACT_ERROR_BOUNDARY_TYPE:
+        return createFiberFromErrorBoundary(pendingProps, mode, lanes, key);
       case REACT_LEGACY_HIDDEN_TYPE:
         if (enableLegacyHidden) {
           return createFiberFromLegacyHidden(pendingProps, mode, lanes, key);
@@ -953,6 +957,18 @@ export function createFiberFromThrow(
   lanes: Lanes,
 ): Fiber {
   const fiber = createFiber(Throw, error, null, mode);
+  fiber.lanes = lanes;
+  return fiber;
+}
+
+export function createFiberFromErrorBoundary(
+  pendingProps: any,
+  mode: TypeOfMode,
+  lanes: Lanes,
+  key: null | string,
+): Fiber {
+  const fiber = createFiber(ErrorBoundaryComponent, pendingProps, key, mode);
+  fiber.elementType = REACT_ERROR_BOUNDARY_TYPE;
   fiber.lanes = lanes;
   return fiber;
 }

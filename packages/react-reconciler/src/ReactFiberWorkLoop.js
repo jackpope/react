@@ -107,6 +107,7 @@ import {
   HostComponent,
   HostHoistable,
   HostSingleton,
+  ErrorBoundaryComponent,
 } from './ReactWorkTags';
 import {ConcurrentRoot, LegacyRoot} from './ReactRootTags';
 import type {Flags} from './ReactFiberFlags';
@@ -3469,6 +3470,8 @@ export function captureCommitPhaseError(
           ensureRootIsScheduled(root);
         }
         return;
+      } else if (fiber.tag === ErrorBoundaryComponent) {
+        throw new Error('FIND ME');
       }
     }
     fiber = fiber.return;

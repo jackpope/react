@@ -17,6 +17,7 @@ export {
   createContext,
   createElement,
   createRef,
+  ErrorBoundary,
   experimental_useEffectEvent,
   forwardRef,
   Fragment,
