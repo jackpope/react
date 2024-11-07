@@ -2149,9 +2149,8 @@ function renderRootSync(
             workInProgressThrownValue = null;
             throwAndUnwindWorkLoop(root, unitOfWork, thrownValue, reason);
             if (
-              enableSiblingPrerendering &&
-              shouldYieldForPrerendering &&
-              workInProgressRootIsPrerendering
+              enableSiblingPrerendering === false ||
+              (shouldYieldForPrerendering && workInProgressRootIsPrerendering)
             ) {
               // We've switched into prerendering mode. This implies that we
               // suspended outside of a Suspense boundary, which means this
