@@ -995,6 +995,7 @@ function updateFragment(
   workInProgress: Fiber,
   renderLanes: Lanes,
 ) {
+  markRef(current, workInProgress);
   const nextChildren = workInProgress.pendingProps;
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
@@ -1038,7 +1039,7 @@ function updateProfiler(
 
 function markRef(current: Fiber | null, workInProgress: Fiber) {
   // TODO: Check props.ref instead of fiber.ref when enableRefAsProp is on.
-  const ref = workInProgress.ref;
+  const ref = workInProgress.ref ?? workInProgress.pendingProps?.props?.ref;
   if (ref === null) {
     if (current !== null && current.ref !== null) {
       // Schedule a Ref effect
@@ -3996,6 +3997,7 @@ function beginWork(
       );
     }
     case Fragment:
+      console.log('updateddd');
       return updateFragment(current, workInProgress, renderLanes);
     case Mode:
       return updateMode(current, workInProgress, renderLanes);

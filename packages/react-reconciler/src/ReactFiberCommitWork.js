@@ -76,6 +76,7 @@ import {
   LegacyHiddenComponent,
   CacheComponent,
   TracingMarkerComponent,
+  Fragment,
 } from './ReactWorkTags';
 import {
   NoFlags,
@@ -2092,6 +2093,19 @@ function commitMutationEffectsOnFiber(
           prepareScopeUpdate(scopeInstance, finishedWork);
         }
       }
+      break;
+    }
+    case Fragment: {
+      recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+      commitReconciliationEffects(finishedWork);
+      console.log('FRAGMENT', flags & Ref, current);
+      if (flags & Ref) {
+        if (current !== null) {
+          safelyDetachRef(finishedWork, finishedWork.return);
+        }
+        safelyAttachRef(finishedWork, finishedWork.return);
+      }
+
       break;
     }
     default: {

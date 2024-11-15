@@ -22,6 +22,7 @@ import {
 } from 'shared/ReactFeatureFlags';
 import {
   ClassComponent,
+  Fragment,
   HostComponent,
   HostHoistable,
   HostSingleton,
@@ -863,14 +864,20 @@ export function safelyCallComponentWillUnmount(
 }
 
 function commitAttachRef(finishedWork: Fiber) {
-  const ref = finishedWork.ref;
+  const ref = finishedWork.ref ?? finishedWork.pendingProps?.props?.ref;
+
   if (ref !== null) {
     const instance = finishedWork.stateNode;
     let instanceToUse;
+    console.log(finishedWork.tag);
     switch (finishedWork.tag) {
       case HostHoistable:
       case HostSingleton:
       case HostComponent:
+        instanceToUse = getPublicInstance(instance);
+        break;
+      case Fragment:
+        // TODO: We need an instance here for Fragments
         instanceToUse = getPublicInstance(instance);
         break;
       default:

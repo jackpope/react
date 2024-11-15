@@ -215,9 +215,9 @@ function validateFragmentProps(
     const keys = Object.keys(element.props);
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
-      if (key !== 'children' && key !== 'key') {
+      if (key !== 'children' && key !== 'key' && key !== 'ref') {
         if (fiber === null) {
-          // For unkeyed root fragments there's no Fiber. We create a fake one just for
+          // For unkeyed root fragments without a ref there's no Fiber. We create a fake one just for
           // error stack handling.
           fiber = createFiberFromElement(element, returnFiber.mode, 0);
           if (__DEV__) {
@@ -599,6 +599,7 @@ function createChildReconciler(
   ): Fiber {
     if (current === null || current.tag !== Fragment) {
       // Insert
+      console.log('hithit');
       const created = createFiberFromFragment(
         fragment,
         returnFiber.mode,
@@ -708,6 +709,7 @@ function createChildReconciler(
         (enableAsyncIterableChildren &&
           typeof newChild[ASYNC_ITERATOR] === 'function')
       ) {
+        console.log('hit');
         const created = createFiberFromFragment(
           newChild,
           returnFiber.mode,
@@ -1675,12 +1677,7 @@ function createChildReconciler(
     }
 
     if (element.type === REACT_FRAGMENT_TYPE) {
-      const created = createFiberFromFragment(
-        element.props.children,
-        returnFiber.mode,
-        lanes,
-        element.key,
-      );
+      const created = createFiberFromElement(element, returnFiber.mode, lanes);
       created.return = returnFiber;
       if (__DEV__) {
         // We treat the parent as the owner for stack purposes.
@@ -1760,12 +1757,13 @@ function createChildReconciler(
     // We treat the ambiguous cases above the same.
     // We don't use recursion here because a fragment inside a fragment
     // is no longer considered "top level" for these purposes.
-    const isUnkeyedTopLevelFragment =
+    const isUnkeyedUnrefedTopLevelFragment =
       typeof newChild === 'object' &&
       newChild !== null &&
       newChild.type === REACT_FRAGMENT_TYPE &&
-      newChild.key === null;
-    if (isUnkeyedTopLevelFragment) {
+      newChild.key === null &&
+      newChild.props.ref === null;
+    if (isUnkeyedUnrefedTopLevelFragment) {
       validateFragmentProps(newChild, null, returnFiber);
       newChild = newChild.props.children;
     }
