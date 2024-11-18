@@ -396,9 +396,33 @@ const warnedUnknownTags: {
 };
 
 class ReactVirtualElement extends HTMLElement {
+  _targets: Set<Node>;
+
   constructor() {
     super();
+    this._targets = new Set([]);
     console.log('<virtual/> created');
+  }
+
+  get tagName(): string {
+    return 'REACT-VIRTUAL';
+  }
+
+  appendChild(child: Node) {
+    this._targets.add(child);
+    console.log('appendChild', child);
+  }
+
+  // $FlowFixMe
+  addEventListener(
+    type: string,
+    listener: EventListener,
+    optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+  ): void {
+    this._targets.forEach(target => {
+      console.log('addEventListener', target);
+      target.addEventListener(type, listener, optionsOrUseCapture);
+    });
   }
 }
 customElements.define('react-virtual', ReactVirtualElement);
@@ -537,6 +561,7 @@ export function appendInitialChild(
   parentInstance: Instance,
   child: Instance | TextInstance,
 ): void {
+  console.log('appendInitialChild');
   parentInstance.appendChild(child);
 }
 

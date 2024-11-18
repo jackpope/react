@@ -45,14 +45,12 @@ describe('FragmentRefs', () => {
     expect(fragmentRef.current).not.toBe(null);
     expect(fragmentRef.current.tagName).toBe('REACT-VIRTUAL');
 
-    // let hasClicked = false;
-    // childRef.current.addEventListener = jest.fn();
-    // fragmentRef.current.addEventListener('click', () => {
-    //   hasClicked = true;
-    // });
+    let hasClicked = false;
+    fragmentRef.current.addEventListener('click', () => {
+      hasClicked = true;
+    });
 
-    // expect(childRef.current.addEventListener).toHaveBeenCalled();
-    // childRef.current.click();
-    // expect(hasClicked).toBe(true);
+    childRef.current.click();
+    expect(hasClicked).toBe(true);
   });
 });

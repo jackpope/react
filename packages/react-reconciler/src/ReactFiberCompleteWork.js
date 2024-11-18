@@ -243,7 +243,6 @@ function appendAllChildren(
         node.tag === HostText ||
         node.tag === Fragment
       ) {
-        console.log('appendInitialChild');
         appendInitialChild(parent, node.stateNode);
       } else if (
         node.tag === HostPortal ||
