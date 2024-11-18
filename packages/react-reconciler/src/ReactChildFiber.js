@@ -511,6 +511,7 @@ function createChildReconciler(
     element: ReactElement,
     lanes: Lanes,
   ): Fiber {
+    console.log('updateElement');
     const elementType = element.type;
     if (elementType === REACT_FRAGMENT_TYPE) {
       const updated = updateFragment(
@@ -520,6 +521,8 @@ function createChildReconciler(
         lanes,
         element.key,
       );
+      coerceRef(updated, element);
+      console.log('updateElement', updated.ref, updated.pendingProps.ref);
       validateFragmentProps(element, updated, returnFiber);
       return updated;
     }
@@ -775,6 +778,7 @@ function createChildReconciler(
     newChild: any,
     lanes: Lanes,
   ): Fiber | null {
+    console.log('updateSlot');
     // Update the fiber if the keys match, otherwise return null.
     const key = oldFiber !== null ? oldFiber.key : null;
 
@@ -800,7 +804,9 @@ function createChildReconciler(
 
     if (typeof newChild === 'object' && newChild !== null) {
       switch (newChild.$$typeof) {
+        case REACT_FRAGMENT_TYPE:
         case REACT_ELEMENT_TYPE: {
+          console.log('hit?');
           if (newChild.key === key) {
             const prevDebugInfo = pushDebugInfo(newChild._debugInfo);
             const updated = updateElement(
@@ -1109,6 +1115,7 @@ function createChildReconciler(
     newChildren: Array<any>,
     lanes: Lanes,
   ): Fiber | null {
+    console.log('reconcilerChildrenArray');
     // This algorithm can't optimize by searching from both ends since we
     // don't have backpointers on fibers. I'm trying to see how far we can get
     // with that model. If it ends up not being worth the tradeoffs, we can
@@ -1417,6 +1424,7 @@ function createChildReconciler(
     newChildren: ?Iterator<mixed>,
     lanes: Lanes,
   ): Fiber | null {
+    console.log('reconcileChildrenIterator');
     if (newChildren == null) {
       throw new Error('An iterable object provided no iterator.');
     }
@@ -1678,6 +1686,7 @@ function createChildReconciler(
 
     if (element.type === REACT_FRAGMENT_TYPE) {
       const created = createFiberFromElement(element, returnFiber.mode, lanes);
+      coerceRef(created, element);
       created.return = returnFiber;
       if (__DEV__) {
         // We treat the parent as the owner for stack purposes.

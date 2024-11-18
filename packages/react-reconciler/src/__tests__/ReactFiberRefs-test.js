@@ -159,48 +159,4 @@ describe('ReactFiberRefs', () => {
     const refsInstance = Array.from(refsCollection)[0];
     expect(Object.isFrozen(refsInstance)).toBe(__DEV__);
   });
-
-  it.only('takes a ref for the child host component', async () => {
-    const fragmentRef = React.createRef();
-    const childRef = React.createRef();
-    const root = ReactNoop.createRoot();
-
-    class TracerRef {
-      constructor() {
-        this._current = null;
-      }
-      get current() {
-        console.trace('get-current');
-        return this._current;
-      }
-      set current(val) {
-        console.trace('set-current');
-        this._current = val;
-      }
-    }
-
-    const tracerRef = new TracerRef();
-
-    await act(() =>
-      root.render(
-        <React.Fragment ref={fragmentRef}>
-          <div ref={childRef}>Hi</div>
-        </React.Fragment>,
-      ),
-    );
-    expect(root).toMatchRenderedOutput(<div>Hi</div>);
-
-    expect(childRef.current).not.toBe(null);
-    expect(fragmentRef.current).not.toBe(null);
-
-    // let hasClicked = false;
-    // childRef.current.addEventListener = jest.fn();
-    // fragmentRef.current.addEventListener('click', () => {
-    //   hasClicked = true;
-    // });
-
-    // expect(childRef.current.addEventListener).toHaveBeenCalled();
-    // childRef.current.click();
-    // expect(hasClicked).toBe(true);
-  });
 });

@@ -864,7 +864,7 @@ export function safelyCallComponentWillUnmount(
 }
 
 function commitAttachRef(finishedWork: Fiber) {
-  const ref = finishedWork.ref ?? finishedWork.pendingProps?.props?.ref;
+  const ref = finishedWork.ref;
 
   if (ref !== null) {
     const instance = finishedWork.stateNode;
@@ -912,7 +912,6 @@ function commitAttachRef(finishedWork: Fiber) {
           );
         }
       }
-
       // $FlowFixMe[incompatible-use] unable to narrow type to the non-function case
       ref.current = instanceToUse;
     }

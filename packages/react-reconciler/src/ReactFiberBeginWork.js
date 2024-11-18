@@ -998,6 +998,7 @@ function updateFragment(
   markRef(current, workInProgress);
   const nextChildren = workInProgress.pendingProps;
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
+  console.log('updateFragment', workInProgress.ref);
   return workInProgress.child;
 }
 
@@ -3997,7 +3998,6 @@ function beginWork(
       );
     }
     case Fragment:
-      console.log('updateddd');
       return updateFragment(current, workInProgress, renderLanes);
     case Mode:
       return updateMode(current, workInProgress, renderLanes);

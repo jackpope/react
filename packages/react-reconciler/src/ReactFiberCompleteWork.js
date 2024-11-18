@@ -238,7 +238,12 @@ function appendAllChildren(
     // children to find all the terminal nodes.
     let node = workInProgress.child;
     while (node !== null) {
-      if (node.tag === HostComponent || node.tag === HostText) {
+      if (
+        node.tag === HostComponent ||
+        node.tag === HostText ||
+        node.tag === Fragment
+      ) {
+        console.log('appendInitialChild');
         appendInitialChild(parent, node.stateNode);
       } else if (
         node.tag === HostPortal ||
@@ -957,13 +962,33 @@ function completeWork(
     case SimpleMemoComponent:
     case FunctionComponent:
     case ForwardRef:
-    case Fragment:
     case Mode:
     case Profiler:
     case ContextConsumer:
     case MemoComponent:
       bubbleProperties(workInProgress);
       return null;
+    case Fragment: {
+      // TODO: hydration -- see createInstance logic for host components
+      console.log('assign instance here!', workInProgress.ref);
+      const rootContainerInstance = getRootHostContainer();
+      const currentHostContext = getHostContext();
+      const instance = createInstance(
+        'react-virtual',
+        newProps,
+        rootContainerInstance,
+        currentHostContext,
+        workInProgress,
+      );
+      // TODO: For persistent renderers, we should pass children as part
+      // of the initial instance creation
+      markCloned(workInProgress);
+      appendAllChildren(instance, workInProgress, false, false);
+      workInProgress.stateNode = instance;
+
+      bubbleProperties(workInProgress);
+      return null;
+    }
     case ClassComponent: {
       const Component = workInProgress.type;
       if (isLegacyContextProvider(Component)) {

@@ -395,6 +395,14 @@ const warnedUnknownTags: {
   webview: true,
 };
 
+class ReactVirtualElement extends HTMLElement {
+  constructor() {
+    super();
+    console.log('<virtual/> created');
+  }
+}
+customElements.define('react-virtual', ReactVirtualElement);
+
 export function createInstance(
   type: string,
   props: Props,
@@ -473,6 +481,10 @@ export function createInstance(
             // This is only necessary when a select in "single selection mode".
             domElement.size = props.size;
           }
+          break;
+        }
+        case 'react-virtual': {
+          domElement = ownerDocument.createElement('react-virtual');
           break;
         }
         default: {

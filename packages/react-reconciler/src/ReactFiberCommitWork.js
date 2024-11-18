@@ -2098,11 +2098,12 @@ function commitMutationEffectsOnFiber(
     case Fragment: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork);
-      console.log('FRAGMENT', flags & Ref, current);
       if (flags & Ref) {
         if (current !== null) {
+          console.log('detaching');
           safelyDetachRef(finishedWork, finishedWork.return);
         }
+        console.log('attaching');
         safelyAttachRef(finishedWork, finishedWork.return);
       }
 
