@@ -779,6 +779,7 @@ export function createFiberFromFragment(
   key: null | string,
 ): Fiber {
   const fiber = createFiber(Fragment, elements, key, mode);
+  fiber.elementType = 'react-virtual';
   fiber.lanes = lanes;
   return fiber;
 }

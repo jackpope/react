@@ -293,6 +293,7 @@ function extractEvents(
   eventSystemFlags: EventSystemFlags,
   targetContainer: null | EventTarget,
 ) {
+  console.log('ChangeEventPlugin.extractEvents', targetInst?.elementType);
   const targetNode = targetInst ? getNodeFromInstance(targetInst) : window;
 
   let getTargetInstFunc, handleEventFunc;

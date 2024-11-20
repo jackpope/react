@@ -409,8 +409,9 @@ class ReactVirtualElement extends HTMLElement {
   }
 
   appendChild(child: Node) {
+    // TODO: Can probably remove _targets and just rely on children.
     this._targets.add(child);
-    console.log('appendChild', child);
+    return super.appendChild(child);
   }
 
   // $FlowFixMe
@@ -420,12 +421,44 @@ class ReactVirtualElement extends HTMLElement {
     optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
   ): void {
     this._targets.forEach(target => {
-      console.log('addEventListener', target);
+      console.log('addEventListener', target.tagName);
       target.addEventListener(type, listener, optionsOrUseCapture);
     });
   }
+
+  // $FlowFixMe
+  removeEventListener(
+    type: string,
+    listener: EventListener,
+    optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+  ): void {
+    this._targets.forEach(target => {
+      console.log('removeEventListener', target.tagName);
+      target.removeEventListener(type, listener, optionsOrUseCapture);
+    });
+  }
+
+  getClientRects(): Array<ClientRect> {
+    let rects: Array<ClientRect> = [];
+    for (let i = 0; i < this.children.length; i++) {
+      rects = rects.concat(this.children[i].getClientRects());
+    }
+    return rects;
+  }
+
+  getRootNode(options: {composed?: boolean, ...} = {}): Node {
+    const parentNode = this.parentNode;
+    if (parentNode == null) {
+      throw new Error(
+        'Cannot call getRootNode without a valid parent node for the Fragment',
+      );
+    }
+    return parentNode.getRootNode();
+  }
 }
-customElements.define('react-virtual', ReactVirtualElement);
+if (customElements.get('react-virtual') == null) {
+  customElements.define('react-virtual', ReactVirtualElement);
+}
 
 export function createInstance(
   type: string,
@@ -561,7 +594,6 @@ export function appendInitialChild(
   parentInstance: Instance,
   child: Instance | TextInstance,
 ): void {
-  console.log('appendInitialChild');
   parentInstance.appendChild(child);
 }
 

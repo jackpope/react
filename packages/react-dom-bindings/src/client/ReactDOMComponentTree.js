@@ -30,6 +30,7 @@ import {
   HostText,
   HostRoot,
   SuspenseComponent,
+  Fragment,
 } from 'react-reconciler/src/ReactWorkTags';
 
 import {getParentSuspenseInstance} from './ReactFiberConfigDOM';
@@ -197,7 +198,8 @@ export function getNodeFromInstance(inst: Fiber): Instance | TextInstance {
     tag === HostComponent ||
     tag === HostHoistable ||
     tag === HostSingleton ||
-    tag === HostText
+    tag === HostText ||
+    tag === Fragment
   ) {
     // In Fiber this, is just the state node right now. We assume it will be
     // a host component or host text.

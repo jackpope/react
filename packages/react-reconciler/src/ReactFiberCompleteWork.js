@@ -93,6 +93,8 @@ import {
   ScheduleRetry,
   ShouldSuspendCommit,
   Cloned,
+  RefStatic,
+  Ref,
 } from './ReactFiberFlags';
 
 import {
@@ -241,7 +243,7 @@ function appendAllChildren(
       if (
         node.tag === HostComponent ||
         node.tag === HostText ||
-        node.tag === Fragment
+        (node.tag === Fragment && (node.flags & (Ref | RefStatic)) !== NoFlags) // TODO: better check to know if its a fragment ref?
       ) {
         appendInitialChild(parent, node.stateNode);
       } else if (
@@ -968,22 +970,25 @@ function completeWork(
       bubbleProperties(workInProgress);
       return null;
     case Fragment: {
-      // TODO: hydration -- see createInstance logic for host components
-      console.log('assign instance here!', workInProgress.ref);
-      const rootContainerInstance = getRootHostContainer();
-      const currentHostContext = getHostContext();
-      const instance = createInstance(
-        'react-virtual',
-        newProps,
-        rootContainerInstance,
-        currentHostContext,
-        workInProgress,
-      );
       // TODO: For persistent renderers, we should pass children as part
       // of the initial instance creation
       markCloned(workInProgress);
-      appendAllChildren(instance, workInProgress, false, false);
-      workInProgress.stateNode = instance;
+
+      // TODO: hydration -- see createInstance logic for host components
+      // TODO: feature flag ref access
+      if (workInProgress.ref !== null) {
+        const rootContainerInstance = getRootHostContainer();
+        const currentHostContext = getHostContext();
+        const instance = createInstance(
+          'react-virtual',
+          newProps,
+          rootContainerInstance,
+          currentHostContext,
+          workInProgress,
+        );
+        appendAllChildren(instance, workInProgress, false, false);
+        workInProgress.stateNode = instance;
+      }
 
       bubbleProperties(workInProgress);
       return null;
@@ -997,6 +1002,7 @@ function completeWork(
       return null;
     }
     case HostRoot: {
+      console.log('complete work for host root', workInProgress.tag);
       const fiberRoot = (workInProgress.stateNode: FiberRoot);
 
       if (enableTransitionTracing) {

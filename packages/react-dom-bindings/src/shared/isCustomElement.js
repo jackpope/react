@@ -8,6 +8,7 @@
  */
 
 function isCustomElement(tagName: string, props: Object): boolean {
+  console.log('isCustomElement', tagName);
   if (tagName.indexOf('-') === -1) {
     return false;
   }
