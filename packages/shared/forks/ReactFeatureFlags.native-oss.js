@@ -74,6 +74,8 @@ export const enableThrottledScheduling = false;
 export const enableViewTransition = false;
 export const enableFastAddPropertiesInDiffing = false;
 
+export const enableFragmentRefs = false;
+
 // Profiling Only
 export const enableProfilerTimer = __PROFILE__;
 export const enableProfilerCommitHooks = __PROFILE__;
