@@ -310,6 +310,10 @@ export function createTextInstance(
   return text;
 }
 
+export function createFragmentInstance(hostParent) {
+  return null;
+}
+
 export function finalizeInitialChildren(domElement, type, props) {
   return false;
 }

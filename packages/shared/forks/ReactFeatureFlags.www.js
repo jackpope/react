@@ -39,6 +39,7 @@ export const {
   enableRemoveConsolePatches,
   enableFastAddPropertiesInDiffing,
   enableViewTransition,
+  enableFragmentRefs,
 } = dynamicFeatureFlags;
 
 // On WWW, __EXPERIMENTAL__ is used for a new modern build.
@@ -110,8 +111,6 @@ export const enableReactTestRendererWarning = false;
 export const disableLegacyMode = true;
 
 export const enableShallowPropDiffing = false;
-
-export const enableFragmentRefs = false;
 
 // Flow magic to verify the exports of this file match the original version.
 ((((null: any): ExportsType): FeatureFlagsType): ExportsType);

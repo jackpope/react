@@ -199,7 +199,7 @@ export function commitShowHideHostTextInstance(node: Fiber, isHidden: boolean) {
   }
 }
 
-function getHostParentFiber(fiber: Fiber): Fiber {
+export function getHostParentFiber(fiber: Fiber): Fiber {
   let parent = fiber.return;
   while (parent !== null) {
     if (isHostParent(parent)) {

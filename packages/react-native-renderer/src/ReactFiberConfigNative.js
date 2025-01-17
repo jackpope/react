@@ -189,6 +189,10 @@ export function createTextInstance(
   return tag;
 }
 
+export function createFragmentInstance(hostParent) {
+  return null;
+}
+
 export function finalizeInitialChildren(
   parentInstance: Instance,
   type: string,

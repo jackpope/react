@@ -500,6 +500,10 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       return inst;
     },
 
+    createFragmentInstance(hostParent) {
+      return null;
+    },
+
     scheduleTimeout: setTimeout,
     cancelTimeout: clearTimeout,
     noTimeout: -1,

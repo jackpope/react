@@ -1474,6 +1474,23 @@ export function createViewTransitionInstance(
   };
 }
 
+interface FragmentInstanceType {
+  parentElement: HTMLElement;
+}
+
+function FragmentInstance(
+  this: FragmentInstanceType,
+  parentElement: HTMLElement,
+) {
+  this.parentElement = parentElement;
+}
+
+export function createFragmentInstance(
+  hostParent: HTMLElement,
+): FragmentInstanceType {
+  return new (FragmentInstance: any)(hostParent);
+}
+
 export function clearContainer(container: Container): void {
   const nodeType = container.nodeType;
   if (nodeType === DOCUMENT_NODE) {

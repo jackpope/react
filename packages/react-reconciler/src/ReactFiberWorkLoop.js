@@ -3528,7 +3528,6 @@ function flushLayoutEffects(): void {
   const subtreeHasLayoutEffects =
     (finishedWork.subtreeFlags & LayoutMask) !== NoFlags;
   const rootHasLayoutEffect = (finishedWork.flags & LayoutMask) !== NoFlags;
-
   if (subtreeHasLayoutEffects || rootHasLayoutEffect) {
     const prevTransition = ReactSharedInternals.T;
     ReactSharedInternals.T = null;

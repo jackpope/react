@@ -24,9 +24,11 @@ import {
   enableSchedulingProfiler,
   enableUseResourceEffectHook,
   enableViewTransition,
+  enableFragmentRefs,
 } from 'shared/ReactFeatureFlags';
 import {
   ClassComponent,
+  Fragment,
   HostComponent,
   HostHoistable,
   HostSingleton,
@@ -48,6 +50,7 @@ import {
 import {
   getPublicInstance,
   createViewTransitionInstance,
+  createFragmentInstance,
 } from './ReactFiberConfig';
 import {
   captureCommitPhaseError,
@@ -84,6 +87,7 @@ import {
   ResourceEffectIdentityKind,
   ResourceEffectUpdateKind,
 } from './ReactFiberHooks';
+import {getHostParentFiber} from './ReactFiberCommitHostEffects';
 
 function shouldProfile(current: Fiber): boolean {
   return (
@@ -891,6 +895,15 @@ function commitAttachRef(finishedWork: Fiber) {
           instanceToUse = instance.ref;
           break;
         }
+      // Fallthrough
+      case Fragment: {
+        if (enableFragmentRefs) {
+          const hostParentFiber = getHostParentFiber(finishedWork);
+          const hostParentInstance = hostParentFiber.stateNode;
+          instanceToUse = createFragmentInstance(hostParentInstance);
+          break;
+        }
+      }
       // Fallthrough
       default:
         instanceToUse = finishedWork.stateNode;

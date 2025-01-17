@@ -62,6 +62,7 @@ import {
   disableLegacyMode,
   enableComponentPerformanceTrack,
   enableViewTransition,
+  enableFragmentRefs,
 } from 'shared/ReactFeatureFlags';
 import {
   FunctionComponent,
@@ -86,6 +87,7 @@ import {
   CacheComponent,
   TracingMarkerComponent,
   ViewTransitionComponent,
+  Fragment,
 } from './ReactWorkTags';
 import {
   NoFlags,
@@ -1523,6 +1525,21 @@ function commitLayoutEffectOnFiber(
           finishedWork,
           committedLanes,
         );
+        if (flags & Ref) {
+          safelyAttachRef(finishedWork, finishedWork.return);
+        }
+        break;
+      }
+      // Fallthrough
+    }
+    case Fragment: {
+      if (enableFragmentRefs) {
+        recursivelyTraverseLayoutEffects(
+          finishedRoot,
+          finishedWork,
+          committedLanes,
+        );
+        commitReconciliationEffects(finishedWork, committedLanes);
         if (flags & Ref) {
           safelyAttachRef(finishedWork, finishedWork.return);
         }
@@ -3060,6 +3077,17 @@ function commitMutationEffectsOnFiber(
         break;
       }
     // Fallthrough
+    case Fragment: {
+      if (enableFragmentRefs) {
+        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+        commitReconciliationEffects(finishedWork, lanes);
+        if (flags & Ref) {
+          safelyAttachRef(finishedWork, finishedWork.return);
+        }
+        break;
+      }
+      // Fallthrough
+    }
     case ScopeComponent: {
       if (enableScopeAPI) {
         recursivelyTraverseMutationEffects(root, finishedWork, lanes);
