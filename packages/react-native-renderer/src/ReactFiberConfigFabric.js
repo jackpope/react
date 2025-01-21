@@ -562,6 +562,14 @@ export function waitForCommitToBeReady(): null {
   return null;
 }
 
+export function createFragmentInstance(): null {
+  return null;
+}
+
+export function appendChildToFragmentInstance(child, fragmentInstance): void {
+  // Noop
+}
+
 export const NotPendingTransition: TransitionStatus = null;
 export const HostTransitionContext: ReactContext<TransitionStatus> = {
   $$typeof: REACT_CONTEXT_TYPE,

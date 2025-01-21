@@ -174,6 +174,8 @@ import {
   hasInstanceChanged,
   hasInstanceAffectedParent,
   wasInstanceInViewport,
+  getPublicInstance,
+  appendChildToFragmentInstance,
   isSingletonScope,
 } from './ReactFiberConfig';
 import {
@@ -1393,6 +1395,21 @@ function commitLayoutEffectOnFiber(
       if (flags & Ref) {
         safelyAttachRef(finishedWork, finishedWork.return);
       }
+
+      if (enableFragmentRefs) {
+        // TODO: Do we need a more specific flag here to gate this check on the parent?
+        const hasParentFragment =
+          finishedWork.return &&
+          finishedWork.return.tag === Fragment &&
+          finishedWork.return.ref !== null;
+        if (hasParentFragment) {
+          appendChildToFragmentInstance(
+            getPublicInstance(finishedWork.stateNode),
+            // $FlowFixMe TODO!
+            finishedWork.return.ref.current,
+          );
+        }
+      }
       break;
     }
     case Profiler: {
@@ -1532,7 +1549,7 @@ function commitLayoutEffectOnFiber(
       }
       // Fallthrough
     }
-    case Fragment: {
+    case Fragment:
       if (enableFragmentRefs) {
         recursivelyTraverseLayoutEffects(
           finishedRoot,
@@ -1545,8 +1562,7 @@ function commitLayoutEffectOnFiber(
         }
         break;
       }
-      // Fallthrough
-    }
+    // Fallthrough
     default: {
       recursivelyTraverseLayoutEffects(
         finishedRoot,
@@ -3048,7 +3064,7 @@ function commitMutationEffectsOnFiber(
       }
       break;
     }
-    case ViewTransitionComponent:
+    case ViewTransitionComponent: {
       if (enableViewTransition) {
         if (flags & Ref) {
           if (!offscreenSubtreeWasHidden && current !== null) {
@@ -3076,17 +3092,7 @@ function commitMutationEffectsOnFiber(
         popMutationContext(prevMutationContext);
         break;
       }
-    // Fallthrough
-    case Fragment: {
-      if (enableFragmentRefs) {
-        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
-        commitReconciliationEffects(finishedWork, lanes);
-        if (flags & Ref) {
-          safelyAttachRef(finishedWork, finishedWork.return);
-        }
-        break;
-      }
-      // Fallthrough
+      break;
     }
     case ScopeComponent: {
       if (enableScopeAPI) {
@@ -3110,6 +3116,16 @@ function commitMutationEffectsOnFiber(
       }
       break;
     }
+    case Fragment:
+      if (enableFragmentRefs) {
+        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
+        commitReconciliationEffects(finishedWork, lanes);
+        if (flags & Ref) {
+          safelyAttachRef(finishedWork, finishedWork.return);
+        }
+        break;
+      }
+    // Fallthrough
     default: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
       commitReconciliationEffects(finishedWork, lanes);

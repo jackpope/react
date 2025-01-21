@@ -884,7 +884,7 @@ function commitAttachRef(finishedWork: Fiber) {
       case HostComponent:
         instanceToUse = getPublicInstance(finishedWork.stateNode);
         break;
-      case ViewTransitionComponent:
+      case ViewTransitionComponent: {
         if (enableViewTransition) {
           const instance: ViewTransitionState = finishedWork.stateNode;
           const props: ViewTransitionProps = finishedWork.memoizedProps;
@@ -895,15 +895,15 @@ function commitAttachRef(finishedWork: Fiber) {
           instanceToUse = instance.ref;
           break;
         }
-      // Fallthrough
-      case Fragment: {
+        break;
+      }
+      case Fragment:
         if (enableFragmentRefs) {
           const hostParentFiber = getHostParentFiber(finishedWork);
           const hostParentInstance = hostParentFiber.stateNode;
           instanceToUse = createFragmentInstance(hostParentInstance);
           break;
         }
-      }
       // Fallthrough
       default:
         instanceToUse = finishedWork.stateNode;

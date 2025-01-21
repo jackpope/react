@@ -1475,20 +1475,87 @@ export function createViewTransitionInstance(
 }
 
 interface FragmentInstanceType {
-  parentElement: HTMLElement;
+  parentElement: Element;
+  eventListeners: Set<{
+    listener: EventListener,
+    type: string,
+    optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+  }>;
+  addEventListener(
+    type: string,
+    listener: EventListener,
+    optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+  ): void;
+  removeEventListener(
+    type: string,
+    listener: EventListener,
+    optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+  ): void;
+  trackChild(child: Element): void;
 }
 
-function FragmentInstance(
-  this: FragmentInstanceType,
-  parentElement: HTMLElement,
-) {
-  this.parentElement = parentElement;
+function FragmentInstance(this: FragmentInstanceType, parentElement: Element) {
+  this.parentElement = parentElement || document.documentElement;
+  if (this.parentElement == null) {
+    throw new Error(
+      'React expected a Fragment Ref to have a parent HTMLElement or to fallback to an <html> element (document.documentElement).' +
+        ' But no parent or <html> element was found. React never removes the documentElement for any Document it renders into so' +
+        ' the cause is likely in some other script running on this page.',
+    );
+  }
+  this.eventListeners = new Set();
 }
+// $FlowFixMe[prop-missing]
+FragmentInstance.prototype.addEventListener = function (
+  this: FragmentInstanceType,
+  type: string,
+  listener: EventListener,
+  optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+): void {
+  const children = this.parentElement.children;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    child.addEventListener(type, listener, optionsOrUseCapture);
+  }
+  this.eventListeners.add({listener, type, optionsOrUseCapture});
+};
+// $FlowFixMe[prop-missing]
+FragmentInstance.prototype.removeEventListener = function (
+  this: FragmentInstanceType,
+  type: string,
+  listener: EventListener,
+  optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
+): void {
+  const children = this.parentElement.children;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    child.removeEventListener(type, listener, optionsOrUseCapture);
+  }
+  this.eventListeners.delete({listener, type, optionsOrUseCapture});
+};
+// $FlowFixMe[prop-missing]
+FragmentInstance.prototype.trackChild = function (
+  this: FragmentInstanceType,
+  child: Element,
+): void {
+  const eventListenersArray = Array.from(this.eventListeners);
+  for (let i = 0; i < eventListenersArray.length; i++) {
+    const {type, listener, optionsOrUseCapture} = eventListenersArray[i];
+    child.addEventListener(type, listener, optionsOrUseCapture);
+  }
+};
 
 export function createFragmentInstance(
-  hostParent: HTMLElement,
+  hostParent: Element,
 ): FragmentInstanceType {
   return new (FragmentInstance: any)(hostParent);
+}
+
+export function appendChildToFragmentInstance(
+  childElement: Element,
+  fragmentInstance: FragmentInstanceType,
+): void {
+  fragmentInstance.trackChild(childElement);
 }
 
 export function clearContainer(container: Container): void {

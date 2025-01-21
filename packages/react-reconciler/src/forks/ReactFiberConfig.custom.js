@@ -148,6 +148,8 @@ export const createViewTransitionInstance =
   $$$config.createViewTransitionInstance;
 export const clearContainer = $$$config.clearContainer;
 export const createFragmentInstance = $$$config.createFragmentInstance;
+export const appendChildToFragmentInstance =
+  $$$config.appendChildToFragmentInstance;
 
 // -------------------
 //     Persistence

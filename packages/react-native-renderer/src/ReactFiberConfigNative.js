@@ -193,6 +193,10 @@ export function createFragmentInstance(hostParent) {
   return null;
 }
 
+export function appendChildToFragmentInstance(child, fragmentInstance): void {
+  // Noop
+}
+
 export function finalizeInitialChildren(
   parentInstance: Instance,
   type: string,
