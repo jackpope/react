@@ -43,6 +43,7 @@ export opaque type FormInstance = mixed;
 export type ViewTransitionInstance = null | {name: string, ...};
 export opaque type InstanceMeasurement = mixed;
 export type EventResponder = any;
+export type FragmentInstance = null | {...};
 
 export const rendererVersion = $$$config.rendererVersion;
 export const rendererPackageName = $$$config.rendererPackageName;
@@ -150,6 +151,8 @@ export const clearContainer = $$$config.clearContainer;
 export const createFragmentInstance = $$$config.createFragmentInstance;
 export const appendChildToFragmentInstance =
   $$$config.appendChildToFragmentInstance;
+export const removeChildFromFragmentInstance =
+  $$$config.removeChildFromFragmentInstance;
 
 // -------------------
 //     Persistence

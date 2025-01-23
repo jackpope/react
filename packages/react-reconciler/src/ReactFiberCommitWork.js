@@ -175,8 +175,8 @@ import {
   hasInstanceAffectedParent,
   wasInstanceInViewport,
   getPublicInstance,
-  appendChildToFragmentInstance,
   isSingletonScope,
+  removeChildFromFragmentInstance,
 } from './ReactFiberConfig';
 import {
   captureCommitPhaseError,
@@ -252,6 +252,7 @@ import {
   commitHostRemoveChild,
   commitHostSingletonAcquisition,
   commitHostSingletonRelease,
+  getFragmentInstanceParent,
 } from './ReactFiberCommitHostEffects';
 import {
   viewTransitionMutationContext,
@@ -1395,21 +1396,6 @@ function commitLayoutEffectOnFiber(
       if (flags & Ref) {
         safelyAttachRef(finishedWork, finishedWork.return);
       }
-
-      if (enableFragmentRefs) {
-        // TODO: Do we need a more specific flag here to gate this check on the parent?
-        const hasParentFragment =
-          finishedWork.return &&
-          finishedWork.return.tag === Fragment &&
-          finishedWork.return.ref !== null;
-        if (hasParentFragment) {
-          appendChildToFragmentInstance(
-            getPublicInstance(finishedWork.stateNode),
-            // $FlowFixMe TODO!
-            finishedWork.return.ref.current,
-          );
-        }
-      }
       break;
     }
     case Profiler: {
@@ -1551,16 +1537,9 @@ function commitLayoutEffectOnFiber(
     }
     case Fragment:
       if (enableFragmentRefs) {
-        recursivelyTraverseLayoutEffects(
-          finishedRoot,
-          finishedWork,
-          committedLanes,
-        );
-        commitReconciliationEffects(finishedWork, committedLanes);
         if (flags & Ref) {
           safelyAttachRef(finishedWork, finishedWork.return);
         }
-        break;
       }
     // Fallthrough
     default: {
@@ -2146,6 +2125,17 @@ function commitDeletionEffectsOnFiber(
     case HostComponent: {
       if (!offscreenSubtreeWasHidden) {
         safelyDetachRef(deletedFiber, nearestMountedAncestor);
+      }
+
+      if (enableFragmentRefs) {
+        const maybeParentFragmentInstance =
+          getFragmentInstanceParent(deletedFiber);
+        if (maybeParentFragmentInstance !== null) {
+          removeChildFromFragmentInstance(
+            getPublicInstance(deletedFiber.stateNode),
+            maybeParentFragmentInstance,
+          );
+        }
       }
       // Intentional fallthrough to next branch
     }
@@ -3118,12 +3108,9 @@ function commitMutationEffectsOnFiber(
     }
     case Fragment:
       if (enableFragmentRefs) {
-        recursivelyTraverseMutationEffects(root, finishedWork, lanes);
-        commitReconciliationEffects(finishedWork, lanes);
         if (flags & Ref) {
           safelyAttachRef(finishedWork, finishedWork.return);
         }
-        break;
       }
     // Fallthrough
     default: {

@@ -70,6 +70,7 @@ export const enableThrottledScheduling = false;
 export const enableViewTransition = false;
 export const enableRemoveConsolePatches = false;
 export const enableFastAddPropertiesInDiffing = false;
+export const enableFragmentRefs = false;
 
 // Flow magic to verify the exports of this file match the original version.
 ((((null: any): ExportsType): FeatureFlagsType): ExportsType);

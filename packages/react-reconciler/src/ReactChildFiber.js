@@ -475,8 +475,6 @@ function createChildReconciler(
     } else {
       // This is an insertion.
       newFiber.flags |= Placement | PlacementDEV;
-      // TODO: should we assign a flag here to later update the parent fragment ref?
-
       return lastPlacedIndex;
     }
   }

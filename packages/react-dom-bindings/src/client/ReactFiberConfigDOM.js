@@ -1474,88 +1474,163 @@ export function createViewTransitionInstance(
   };
 }
 
-interface FragmentInstanceType {
-  parentElement: Element;
-  eventListeners: Set<{
-    listener: EventListener,
-    type: string,
-    optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
-  }>;
+type EventListenerOptionsOrUseCapture =
+  | boolean
+  | {
+      capture?: boolean,
+      once?: boolean,
+      passive?: boolean,
+      signal?: AbortSignal,
+      ...
+    };
+
+type StoredEventListener = {
+  type: string,
+  listener: EventListener,
+  optionsOrUseCapture: void | EventListenerOptionsOrUseCapture,
+};
+
+export type FragmentInstance = {
+  parentInstance: Instance | Container,
+  _children: Set<Element>,
+  _eventListeners: Array<StoredEventListener>,
   addEventListener(
     type: string,
     listener: EventListener,
     optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
-  ): void;
+  ): void,
   removeEventListener(
     type: string,
     listener: EventListener,
     optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
-  ): void;
-  trackChild(child: Element): void;
-}
+  ): void,
+  appendChild(child: Element): void,
+  removeChild(child: Element): void,
+};
 
-function FragmentInstance(this: FragmentInstanceType, parentElement: Element) {
-  this.parentElement = parentElement || document.documentElement;
-  if (this.parentElement == null) {
+function FragmentInstancePseudoElement(
+  this: FragmentInstance,
+  parentInstance: Container,
+) {
+  this.parentInstance = parentInstance || document.documentElement;
+  if (this.parentInstance === null) {
     throw new Error(
       'React expected a Fragment Ref to have a parent HTMLElement or to fallback to an <html> element (document.documentElement).' +
         ' But no parent or <html> element was found. React never removes the documentElement for any Document it renders into so' +
         ' the cause is likely in some other script running on this page.',
     );
   }
-  this.eventListeners = new Set();
+  this._children = new Set();
+  this._eventListeners = [];
 }
 // $FlowFixMe[prop-missing]
-FragmentInstance.prototype.addEventListener = function (
-  this: FragmentInstanceType,
+FragmentInstancePseudoElement.prototype.addEventListener = function (
+  this: FragmentInstance,
   type: string,
   listener: EventListener,
   optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
 ): void {
-  const children = this.parentElement.children;
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i];
-    child.addEventListener(type, listener, optionsOrUseCapture);
+  const isNewEventListener =
+    indexOfEventListener(this._eventListeners, {
+      type,
+      listener,
+      optionsOrUseCapture,
+    }) === -1;
+  if (isNewEventListener) {
+    this._eventListeners.push({type, listener, optionsOrUseCapture});
+    this._children.forEach(child => {
+      child.addEventListener(type, listener, optionsOrUseCapture);
+    });
   }
-  this.eventListeners.add({listener, type, optionsOrUseCapture});
 };
 // $FlowFixMe[prop-missing]
-FragmentInstance.prototype.removeEventListener = function (
-  this: FragmentInstanceType,
+FragmentInstancePseudoElement.prototype.removeEventListener = function (
+  this: FragmentInstance,
   type: string,
   listener: EventListener,
   optionsOrUseCapture?: EventListenerOptionsOrUseCapture,
 ): void {
-  const children = this.parentElement.children;
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i];
+  this._children.forEach(child => {
     child.removeEventListener(type, listener, optionsOrUseCapture);
-  }
-  this.eventListeners.delete({listener, type, optionsOrUseCapture});
+  });
+  const index = indexOfEventListener(this._eventListeners, {
+    type,
+    listener,
+    optionsOrUseCapture,
+  });
+  this._eventListeners.splice(index, 1);
 };
 // $FlowFixMe[prop-missing]
-FragmentInstance.prototype.trackChild = function (
-  this: FragmentInstanceType,
+FragmentInstancePseudoElement.prototype.appendChild = function (
+  this: FragmentInstance,
   child: Element,
 ): void {
-  const eventListenersArray = Array.from(this.eventListeners);
-  for (let i = 0; i < eventListenersArray.length; i++) {
-    const {type, listener, optionsOrUseCapture} = eventListenersArray[i];
+  this._children.add(child);
+  this._eventListeners.forEach(({type, listener, optionsOrUseCapture}) => {
     child.addEventListener(type, listener, optionsOrUseCapture);
-  }
+  });
+};
+// $FlowFixMe[prop-missing]
+FragmentInstancePseudoElement.prototype.removeChild = function (
+  this: FragmentInstance,
+  child: Element,
+): void {
+  this._children.delete(child);
+  this._eventListeners.forEach(({type, listener, optionsOrUseCapture}) => {
+    child.removeEventListener(type, listener, optionsOrUseCapture);
+  });
 };
 
+function normalizeListenerOptions(
+  opts: ?EventListenerOptionsOrUseCapture,
+): string {
+  if (opts == null) {
+    return 'capture=undefined';
+  }
+
+  if (typeof opts === 'boolean') {
+    return `capture=${opts ? '1' : '0'}`;
+  }
+
+  return `capture=${opts.capture ? '1' : '0'}&once=${opts.once ? '1' : '0'}&passive=${opts.passive ? '1' : '0'}`;
+}
+
+function indexOfEventListener(
+  eventListeners: Array<StoredEventListener>,
+  eventListenerToFind: StoredEventListener,
+): number {
+  for (let i = 0; i < eventListeners.length; i++) {
+    const item = eventListeners[i];
+    if (
+      item.type === eventListenerToFind.type &&
+      item.listener === eventListenerToFind.listener &&
+      normalizeListenerOptions(item.optionsOrUseCapture) ===
+        normalizeListenerOptions(eventListenerToFind.optionsOrUseCapture)
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
 export function createFragmentInstance(
-  hostParent: Element,
-): FragmentInstanceType {
-  return new (FragmentInstance: any)(hostParent);
+  parentInstance: Instance | Container,
+): FragmentInstance {
+  return new (FragmentInstancePseudoElement: any)(parentInstance);
 }
 
 export function appendChildToFragmentInstance(
   childElement: Element,
-  fragmentInstance: FragmentInstanceType,
+  fragmentInstance: FragmentInstance,
 ): void {
-  fragmentInstance.trackChild(childElement);
+  fragmentInstance.appendChild(childElement);
+}
+
+export function removeChildFromFragmentInstance(
+  childElement: Element,
+  fragmentInstance: FragmentInstance,
+): void {
+  fragmentInstance.removeChild(childElement);
 }
 
 export function clearContainer(container: Container): void {

@@ -24,6 +24,7 @@ import type {
   ViewTransitionState,
 } from './ReactFiberViewTransitionComponent';
 import type {TracingMarkerInstance} from './ReactFiberTracingMarkerComponent';
+import type {FragmentState} from './ReactFiberFragmentComponent';
 
 import {
   supportsResources,
@@ -42,6 +43,7 @@ import {
   enableObjectFiber,
   enableOwnerStacks,
   enableViewTransition,
+  enableFragmentRefs,
 } from 'shared/ReactFeatureFlags';
 import {NoFlags, Placement, StaticMask} from './ReactFiberFlags';
 import {ConcurrentRoot} from './ReactRootTags';
@@ -781,6 +783,12 @@ export function createFiberFromFragment(
   key: null | string,
 ): Fiber {
   const fiber = createFiber(Fragment, elements, key, mode);
+  if (enableFragmentRefs) {
+    const instance: FragmentState = {
+      ref: null,
+    };
+    fiber.stateNode = instance;
+  }
   fiber.lanes = lanes;
   return fiber;
 }

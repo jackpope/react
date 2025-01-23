@@ -500,11 +500,15 @@ function createReactNoop(reconciler: Function, useMutation: boolean) {
       return inst;
     },
 
-    createFragmentInstance(hostParent) {
+    createFragmentInstance(parentInstance) {
       return null;
     },
 
     appendChildToFragmentInstance(child, fragmentInstance) {
+      // Noop
+    },
+
+    removeChildFromFragmentInstance(child, fragmentInstance) {
       // Noop
     },
 

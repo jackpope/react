@@ -24,6 +24,7 @@ import {
   HostText,
   HostPortal,
   DehydratedFragment,
+  Fragment,
 } from './ReactWorkTags';
 import {ContentReset, Placement} from './ReactFiberFlags';
 import {
@@ -50,11 +51,14 @@ import {
   acquireSingletonInstance,
   releaseSingletonInstance,
   isSingletonScope,
+  appendChildToFragmentInstance,
 } from './ReactFiberConfig';
 import {captureCommitPhaseError} from './ReactFiberWorkLoop';
 import {trackHostMutation} from './ReactFiberMutationTracking';
 
 import {runWithFiberInDEV} from './ReactCurrentFiber';
+import type {FragmentInstance} from 'react-dom-bindings/src/client/ReactFiberConfigDOM';
+import {enableFragmentRefs} from 'shared/ReactFeatureFlags';
 
 export function commitHostMount(finishedWork: Fiber) {
   const type = finishedWork.type;
@@ -214,6 +218,25 @@ export function getHostParentFiber(fiber: Fiber): Fiber {
   );
 }
 
+export function getFragmentInstanceParent(
+  fiber: Fiber,
+): null | FragmentInstance {
+  let parent = fiber.return;
+  while (parent !== null) {
+    if (isFragmentInstanceParent(parent)) {
+      return parent.stateNode.ref;
+    }
+
+    if (isHostParent(parent)) {
+      return null;
+    }
+
+    parent = parent.return;
+  }
+
+  return null;
+}
+
 function isHostParent(fiber: Fiber): boolean {
   return (
     fiber.tag === HostComponent ||
@@ -224,6 +247,36 @@ function isHostParent(fiber: Fiber): boolean {
       : false) ||
     fiber.tag === HostPortal
   );
+}
+
+function isFragmentInstanceParent(fiber: Fiber): boolean {
+  return (
+    fiber &&
+    fiber.tag === Fragment &&
+    fiber.stateNode !== null &&
+    fiber.stateNode.ref !== null
+  );
+}
+
+export function appendHostChildrenToFragmentInstance(
+  child: Fiber | null,
+  instance: FragmentInstance,
+) {
+  if (child === null) {
+    return;
+  }
+  if (child.sibling !== null) {
+    appendHostChildrenToFragmentInstance(child.sibling, instance);
+  }
+
+  if (child.tag === HostComponent) {
+    instance.appendChild(child.stateNode);
+    return;
+  }
+
+  if (child.child !== null) {
+    appendHostChildrenToFragmentInstance(child.child, instance);
+  }
 }
 
 function getHostSibling(fiber: Fiber): ?Instance {
@@ -299,6 +352,15 @@ function insertOrAppendPlacementNodeIntoContainer(
       appendChildToContainer(parent, stateNode);
     }
     trackHostMutation();
+    if (enableFragmentRefs && tag === HostComponent) {
+      const maybeParentFragmentInstance = getFragmentInstanceParent(node);
+      if (maybeParentFragmentInstance !== null) {
+        appendChildToFragmentInstance(
+          node.stateNode,
+          maybeParentFragmentInstance,
+        );
+      }
+    }
     return;
   } else if (tag === HostPortal) {
     // If the insertion itself is a portal, then we don't want to traverse
@@ -343,6 +405,15 @@ function insertOrAppendPlacementNode(
       appendChild(parent, stateNode);
     }
     trackHostMutation();
+    if (enableFragmentRefs && tag === HostComponent) {
+      const maybeParentFragmentInstance = getFragmentInstanceParent(node);
+      if (maybeParentFragmentInstance !== null) {
+        appendChildToFragmentInstance(
+          node.stateNode,
+          maybeParentFragmentInstance,
+        );
+      }
+    }
     return;
   } else if (tag === HostPortal) {
     // If the insertion itself is a portal, then we don't want to traverse

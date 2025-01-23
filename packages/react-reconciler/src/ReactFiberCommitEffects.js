@@ -31,6 +31,7 @@ import {
   Fragment,
   HostComponent,
   HostHoistable,
+  HostRoot,
   HostSingleton,
   ViewTransitionComponent,
 } from './ReactWorkTags';
@@ -87,7 +88,12 @@ import {
   ResourceEffectIdentityKind,
   ResourceEffectUpdateKind,
 } from './ReactFiberHooks';
-import {getHostParentFiber} from './ReactFiberCommitHostEffects';
+import {
+  appendHostChildrenToFragmentInstance,
+  getHostParentFiber,
+} from './ReactFiberCommitHostEffects';
+import type {FragmentState} from './ReactFiberFragmentComponent';
+import type {FragmentInstance} from 'react-dom-bindings/src/client/ReactFiberConfigDOM';
 
 function shouldProfile(current: Fiber): boolean {
   return (
@@ -899,9 +905,23 @@ function commitAttachRef(finishedWork: Fiber) {
       }
       case Fragment:
         if (enableFragmentRefs) {
+          const instance: FragmentState = finishedWork.stateNode;
           const hostParentFiber = getHostParentFiber(finishedWork);
-          const hostParentInstance = hostParentFiber.stateNode;
-          instanceToUse = createFragmentInstance(hostParentInstance);
+          const hostParentInstance =
+            hostParentFiber.tag === HostRoot
+              ? hostParentFiber.stateNode.containerInfo
+              : hostParentFiber.stateNode;
+          if (
+            instance.ref === null ||
+            instance.ref.parentInstance !== hostParentInstance
+          ) {
+            instance.ref = createFragmentInstance(hostParentInstance);
+            appendHostChildrenToFragmentInstance(
+              finishedWork.child,
+              instance.ref,
+            );
+          }
+          instanceToUse = instance.ref;
           break;
         }
       // Fallthrough
