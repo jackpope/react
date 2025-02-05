@@ -530,5 +530,6 @@
   "542": "Suspense Exception: This is not a real error! It's an implementation detail of `useActionState` to interrupt the current render. You must either rethrow it immediately, or move the `useActionState` call outside of the `try/catch` block. Capturing without rethrowing will lead to unexpected behavior.\n\nTo handle async errors, wrap your component in an error boundary.",
   "543": "Expected a ResourceEffectUpdate to be pushed together with ResourceEffectIdentity. This is a bug in React.",
   "544": "Found a pair with an auto name. This is a bug in React.",
-  "545": "The %s tag may only be rendered once."
+  "545": "The %s tag may only be rendered once.",
+  "546": "React expected a Fragment Ref to have a parent HTMLElement or to fallback to an <html> element (document.documentElement). But no parent or <html> element was found. React never removes the documentElement for any Document it renders into so the cause is likely in some other script running on this page."
 }
