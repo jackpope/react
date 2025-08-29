@@ -22,7 +22,7 @@ import {
   type EventPriority,
 } from 'react-reconciler/src/ReactEventPriorities';
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
-import {HostText} from 'react-reconciler/src/ReactWorkTags';
+import {HostRoot, HostText} from 'react-reconciler/src/ReactWorkTags';
 import {
   getFragmentParentHostFiber,
   getInstanceFromHostFiber,
@@ -622,6 +622,9 @@ export type FragmentInstanceType = {
   observeUsing: (observer: IntersectionObserver) => void,
   unobserveUsing: (observer: IntersectionObserver) => void,
   compareDocumentPosition: (otherNode: PublicInstance) => number,
+  getRootNode(getRootNodeOptions?: {
+    composed: boolean,
+  }): Document | ShadowRoot | FragmentInstanceType,
 };
 
 function FragmentInstance(this: FragmentInstanceType, fragmentFiber: Fiber) {
@@ -730,6 +733,25 @@ function collectChildren(child: Fiber, collection: Array<Fiber>): boolean {
   collection.push(child);
   return false;
 }
+
+// $FlowFixMe[prop-missing]
+FragmentInstance.prototype.getRootNode = function (
+  this: FragmentInstanceType,
+  getRootNodeOptions: {composed: boolean},
+  // TODO: Figure out typing.
+): Document | ShadowRoot | FragmentInstanceType {
+  const parentHostFiber = getFragmentParentHostFiber(this._fragmentFiber);
+  // TODO: See if we should just return the parent if its host root.
+  if (parentHostFiber === null || parentHostFiber.tag === HostRoot) {
+    return this;
+  }
+  const parentHostInstance =
+    getInstanceFromHostFiber<Instance>(parentHostFiber);
+  const rootNode =
+    // $FlowFixMe[prop-missing]
+    (parentHostInstance.getRootNode(getRootNodeOptions): Document | ShadowRoot);
+  return rootNode;
+};
 
 export function createFragmentInstance(
   fragmentFiber: Fiber,
