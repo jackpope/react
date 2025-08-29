@@ -625,6 +625,7 @@ export type FragmentInstanceType = {
   getRootNode(getRootNodeOptions?: {
     composed: boolean,
   }): Document | ShadowRoot | FragmentInstanceType,
+  getClientRects: () => Array<DOMRect>,
 };
 
 function FragmentInstance(this: FragmentInstanceType, fragmentFiber: Fiber) {
@@ -752,6 +753,23 @@ FragmentInstance.prototype.getRootNode = function (
     (parentHostInstance.getRootNode(getRootNodeOptions): Document | ShadowRoot);
   return rootNode;
 };
+
+// $FlowFixMe[prop-missing]
+FragmentInstance.prototype.getClientRects = function (
+  this: FragmentInstanceType,
+): Array<DOMRect> {
+  const rects: Array<DOMRect> = [];
+  traverseFragmentInstance(this._fragmentFiber, collectClientRects, rects);
+  return rects;
+};
+
+function collectClientRects(child: Fiber, rects: Array<DOMRect>): boolean {
+  const instance = getInstanceFromHostFiber<Instance>(child);
+  // $FlowFixMe[method-unbinding]
+  // $FlowFixMe[prop-missing]
+  rects.push.apply(rects, instance.getBoundingClientRect());
+  return false;
+}
 
 export function createFragmentInstance(
   fragmentFiber: Fiber,
