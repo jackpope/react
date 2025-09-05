@@ -624,7 +624,7 @@ export type FragmentInstanceType = {
   compareDocumentPosition: (otherNode: PublicInstance) => number,
   getRootNode(getRootNodeOptions?: {
     composed: boolean,
-  }): Document | ShadowRoot | FragmentInstanceType,
+  }): PublicRootInstance | FragmentInstanceType,
   getClientRects: () => Array<DOMRect>,
 };
 
@@ -746,10 +746,9 @@ FragmentInstance.prototype.getRootNode = function (
   if (parentHostFiber === null || parentHostFiber.tag === HostRoot) {
     return this;
   }
-  const parentHostInstance =
-    getInstanceFromHostFiber<Instance>(parentHostFiber);
+  const parentHostInstance = getPublicInstanceFromHostFiber(parentHostFiber);
   const rootNode =
-    // $FlowFixMe[prop-missing]
+    // $FlowFixMe[incompatible-use]
     (parentHostInstance.getRootNode(getRootNodeOptions): Document | ShadowRoot);
   return rootNode;
 };
@@ -764,9 +763,9 @@ FragmentInstance.prototype.getClientRects = function (
 };
 
 function collectClientRects(child: Fiber, rects: Array<DOMRect>): boolean {
-  const instance = getInstanceFromHostFiber<Instance>(child);
+  const instance = getPublicInstanceFromHostFiber(child);
   // $FlowFixMe[method-unbinding]
-  // $FlowFixMe[prop-missing]
+  // $FlowFixMe[incompatible-use]
   rects.push.apply(rects, instance.getBoundingClientRect());
   return false;
 }
