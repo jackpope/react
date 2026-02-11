@@ -1616,10 +1616,12 @@ function subscribeToBoundaryResources(
       retryTimedOutBoundary(boundary, claimNextRetryLane());
     });
     cancelFns.push(cancel);
-  } else {
-    // All resources already ready — schedule immediate retry
-    retryTimedOutBoundary(boundary, claimNextRetryLane());
   }
+  // If schedulePendingCommit is null, all resources are already ready (or
+  // there are no suspensey resources). Don't schedule an immediate retry —
+  // either the boundary is suspended for data reasons (which has its own
+  // ping mechanism), or the resources loaded synchronously and the next
+  // regular retry will pick it up.
 }
 
 function walkForSuspenseyInstances(
