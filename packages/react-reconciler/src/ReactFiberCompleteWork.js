@@ -144,6 +144,8 @@ import {
   setShallowSuspenseListContext,
   ForceSuspenseFallback,
   setDefaultShallowSuspenseListContext,
+  hasSuspenseListContext,
+  InSuspenseList,
 } from './ReactFiberSuspenseContext';
 import {popHiddenContext} from './ReactFiberHiddenContext';
 import {findFirstSuspended} from './ReactFiberSuspenseComponent';
@@ -1565,7 +1567,31 @@ function completeWork(
         // Continue with the normal Suspense path.
       }
 
+      // Read the SuspenseList context before popping
+      const suspenseContext = suspenseStackCursor.current;
+
       popSuspenseHandler(workInProgress);
+
+      // If this Suspense boundary is inside a SuspenseList and has subtree
+      // resources that aren't ready, absorb the suspension. Set DidCapture
+      // to trigger a fallback re-render, preserving the primary tree as a
+      // hidden Offscreen (Activity). This allows per-boundary subscriptions
+      // to retry each boundary independently when its resources load.
+      if (
+        (workInProgress.flags & DidCapture) === NoFlags &&
+        hasSuspenseListContext(suspenseContext, InSuspenseList) &&
+        (workInProgress.subtreeFlags & SuspenseyCommitPending) !== NoFlags
+      ) {
+        workInProgress.flags |= DidCapture;
+        workInProgress.lanes = renderLanes;
+        if (
+          enableProfilerTimer &&
+          (workInProgress.mode & ProfileMode) !== NoMode
+        ) {
+          transferActualDuration(workInProgress);
+        }
+        return workInProgress;
+      }
 
       if ((workInProgress.flags & DidCapture) !== NoFlags) {
         // Something suspended. Re-render with the fallback children.
