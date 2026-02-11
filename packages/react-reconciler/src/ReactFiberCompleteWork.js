@@ -1773,6 +1773,19 @@ function completeWork(
                 const retryQueue: RetryQueue | null =
                   (suspended.updateQueue: any);
                 workInProgress.updateQueue = retryQueue;
+                // For suspensey resources (e.g. blocking images), the suspended
+                // boundary uses ScheduleRetry instead of thenables in the retry
+                // queue. Transfer that flag to the SuspenseList so that
+                // scheduleRetryEffect can schedule the retry. Without this, the
+                // ScheduleRetry is lost when resetChildFibers clears boundary
+                // flags, leaving the boundaries stuck in fallback forever.
+                // Only do this when there are no thenables (retryQueue is null),
+                // because data-suspended boundaries also set ScheduleRetry for
+                // sibling prerendering, but their retries are handled by the
+                // thenable/ping mechanism instead.
+                if (retryQueue === null && suspended.flags & ScheduleRetry) {
+                  workInProgress.flags |= ScheduleRetry;
+                }
                 scheduleRetryEffect(workInProgress, retryQueue);
 
                 // Rerender the whole list, but this time, we'll force fallbacks
