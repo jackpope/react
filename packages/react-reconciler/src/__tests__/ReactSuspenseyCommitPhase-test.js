@@ -410,6 +410,169 @@ describe('ReactSuspenseyCommitPhase', () => {
     );
   });
 
+  // @gate enableSuspenseList && enableSuspenseyImages
+  it('SuspenseList respects forwards order when resources load out of order', async () => {
+    function App() {
+      return (
+        <SuspenseList revealOrder="forwards" tail="visible">
+          <Suspense fallback={<Text text="Loading A" />}>
+            <SuspenseyImage src="A" />
+          </Suspense>
+          <Suspense fallback={<Text text="Loading B" />}>
+            <SuspenseyImage src="B" />
+          </Suspense>
+          <Suspense fallback={<Text text="Loading C" />}>
+            <SuspenseyImage src="C" />
+          </Suspense>
+        </SuspenseList>
+      );
+    }
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      startTransition(() => {
+        root.render(<App />);
+      });
+    });
+    assertLog([
+      'Image requested [A]',
+      'Loading A',
+      'Loading B',
+      'Loading C',
+      'Image requested [B]',
+      'Image requested [C]',
+    ]);
+    expect(root).toMatchRenderedOutput('Loading ALoading BLoading C');
+
+    // C loads first, but A hasn't loaded yet, so nothing reveals
+    await act(() => {
+      resolveSuspenseyThing('C');
+    });
+    expect(root).toMatchRenderedOutput('Loading ALoading BLoading C');
+
+    // B loads, but A still hasn't loaded
+    await act(() => {
+      resolveSuspenseyThing('B');
+    });
+    expect(root).toMatchRenderedOutput('Loading ALoading BLoading C');
+
+    // A loads — now A, B, and C can all reveal in order
+    await act(() => {
+      resolveSuspenseyThing('A');
+    });
+    expect(root).toMatchRenderedOutput(
+      <>
+        <suspensey-thing src="A" />
+        <suspensey-thing src="B" />
+        <suspensey-thing src="C" />
+      </>,
+    );
+  });
+
+  // @gate enableSuspenseList && enableSuspenseyImages
+  it('SuspenseList with multiple suspensey images per row', async () => {
+    function App() {
+      return (
+        <SuspenseList revealOrder="forwards" tail="visible">
+          <Suspense fallback={<Text text="Loading Row 1" />}>
+            <SuspenseyImage src="A1" />
+            <SuspenseyImage src="A2" />
+          </Suspense>
+          <Suspense fallback={<Text text="Loading Row 2" />}>
+            <SuspenseyImage src="B1" />
+          </Suspense>
+        </SuspenseList>
+      );
+    }
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      startTransition(() => {
+        root.render(<App />);
+      });
+    });
+    // All images should be requested (no waterfall)
+    assertLog([
+      'Image requested [A1]',
+      'Image requested [A2]',
+      'Loading Row 1',
+      'Loading Row 2',
+      'Image requested [B1]',
+    ]);
+    expect(root).toMatchRenderedOutput('Loading Row 1Loading Row 2');
+
+    // Resolve one of two images in row 1 — row 1 should not reveal yet
+    await act(() => {
+      resolveSuspenseyThing('A1');
+    });
+    expect(root).toMatchRenderedOutput('Loading Row 1Loading Row 2');
+
+    // Resolve B1 — row 2 can't reveal because row 1 is still pending (forwards order)
+    await act(() => {
+      resolveSuspenseyThing('B1');
+    });
+    expect(root).toMatchRenderedOutput('Loading Row 1Loading Row 2');
+
+    // Resolve A2 — now row 1 is ready, both rows reveal
+    await act(() => {
+      resolveSuspenseyThing('A2');
+    });
+    expect(root).toMatchRenderedOutput(
+      <>
+        <suspensey-thing src="A1" />
+        <suspensey-thing src="A2" />
+        <suspensey-thing src="B1" />
+      </>,
+    );
+  });
+
+  // @gate enableSuspenseList && enableSuspenseyImages
+  it('SuspenseList with revealOrder="together" waits for all suspensey resources', async () => {
+    function App() {
+      return (
+        <SuspenseList revealOrder="together">
+          <Suspense fallback={<Text text="Loading A" />}>
+            <SuspenseyImage src="A" />
+          </Suspense>
+          <Suspense fallback={<Text text="Loading B" />}>
+            <SuspenseyImage src="B" />
+          </Suspense>
+        </SuspenseList>
+      );
+    }
+
+    const root = ReactNoop.createRoot();
+    await act(() => {
+      startTransition(() => {
+        root.render(<App />);
+      });
+    });
+    assertLog([
+      'Image requested [A]',
+      'Loading A',
+      'Image requested [B]',
+      'Loading B',
+    ]);
+    expect(root).toMatchRenderedOutput('Loading ALoading B');
+
+    // A loads but B hasn't — both stay as fallbacks (together mode)
+    await act(() => {
+      resolveSuspenseyThing('A');
+    });
+    expect(root).toMatchRenderedOutput('Loading ALoading B');
+
+    // B loads — both reveal together
+    await act(() => {
+      resolveSuspenseyThing('B');
+    });
+    expect(root).toMatchRenderedOutput(
+      <>
+        <suspensey-thing src="A" />
+        <suspensey-thing src="B" />
+      </>,
+    );
+  });
+
   // @gate enableSuspenseyImages
   it('avoid triggering a fallback if resource loads immediately', async () => {
     const root = ReactNoop.createRoot();
