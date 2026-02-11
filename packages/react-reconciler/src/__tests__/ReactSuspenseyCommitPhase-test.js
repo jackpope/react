@@ -342,7 +342,7 @@ describe('ReactSuspenseyCommitPhase', () => {
   });
 
   // @gate enableSuspenseList && enableSuspenseyImages
-  it('demonstrate current behavior when used with SuspenseList (not ideal)', async () => {
+  it('SuspenseList reveals each row as its suspensey resource loads', async () => {
     function App() {
       return (
         <SuspenseList revealOrder="forwards" tail="visible">
@@ -375,15 +375,32 @@ describe('ReactSuspenseyCommitPhase', () => {
     ]);
     expect(root).toMatchRenderedOutput('Loading ALoading BLoading C');
 
-    // TODO: Notice that none of these items appear until they've all loaded.
-    // That's not ideal; we should commit each row as it becomes ready to
-    // commit. That means we need to prepare both the fallback and the primary
-    // tree during the render phase. Related to Activity, too.
-    resolveSuspenseyThing('A');
-    expect(root).toMatchRenderedOutput('Loading ALoading BLoading C');
-    resolveSuspenseyThing('B');
-    expect(root).toMatchRenderedOutput('Loading ALoading BLoading C');
-    resolveSuspenseyThing('C');
+    // Each row appears as its resource loads, in order
+    await act(() => {
+      resolveSuspenseyThing('A');
+    });
+    expect(root).toMatchRenderedOutput(
+      <>
+        <suspensey-thing src="A" />
+        Loading B
+        Loading C
+      </>,
+    );
+
+    await act(() => {
+      resolveSuspenseyThing('B');
+    });
+    expect(root).toMatchRenderedOutput(
+      <>
+        <suspensey-thing src="A" />
+        <suspensey-thing src="B" />
+        Loading C
+      </>,
+    );
+
+    await act(() => {
+      resolveSuspenseyThing('C');
+    });
     expect(root).toMatchRenderedOutput(
       <>
         <suspensey-thing src="A" />
