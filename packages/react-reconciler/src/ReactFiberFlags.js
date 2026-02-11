@@ -49,6 +49,7 @@ export const ViewTransitionNamedMount = ShouldSuspendCommit;
 export const DidDefer = ContentReset;
 export const FormReset = Snapshot;
 export const AffectedParentLayout = ContentReset;
+export const SuspenseyCommitPending = Callback;
 
 export const LifecycleEffectMask =
   Passive | Update | Callback | Ref | Snapshot | StoreConsistency;

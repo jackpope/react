@@ -168,11 +168,15 @@ export opaque type ShallowSuspenseContext: SuspenseContext = number;
 
 const DefaultSuspenseContext: SuspenseContext = 0b00;
 
-const SubtreeSuspenseContextMask: SuspenseContext = 0b01;
+const SubtreeSuspenseContextMask: SuspenseContext = 0b101;
 
 // ForceSuspenseFallback can be used by SuspenseList to force newly added
 // items into their fallback state during one of the render passes.
 export const ForceSuspenseFallback: ShallowSuspenseContext = 0b10;
+
+// InSuspenseList indicates that a Suspense boundary is a direct child of
+// a SuspenseList. Used to enable per-boundary suspensey commit absorption.
+export const InSuspenseList: SubtreeSuspenseContext = 0b100;
 
 export const suspenseStackCursor: StackCursor<SuspenseContext> = createCursor(
   DefaultSuspenseContext,

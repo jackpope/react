@@ -96,6 +96,7 @@ import {
   MaySuspendCommit,
   ScheduleRetry,
   ShouldSuspendCommit,
+  SuspenseyCommitPending,
   Cloned,
   ViewTransitionStatic,
   Hydrate,
@@ -589,7 +590,7 @@ function preloadInstanceAndSuspendIfNeeded(
     const isReady = preloadInstance(workInProgress.stateNode, type, newProps);
     if (!isReady) {
       if (shouldRemainOnPreviousScreen()) {
-        workInProgress.flags |= ShouldSuspendCommit;
+        workInProgress.flags |= ShouldSuspendCommit | SuspenseyCommitPending;
       } else {
         suspendCommit();
       }

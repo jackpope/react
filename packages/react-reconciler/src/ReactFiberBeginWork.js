@@ -194,6 +194,7 @@ import {
   suspenseStackCursor,
   pushSuspenseListContext,
   ForceSuspenseFallback,
+  InSuspenseList,
   hasSuspenseListContext,
   setDefaultShallowSuspenseListContext,
   setShallowSuspenseListContext,
@@ -3412,6 +3413,7 @@ function updateSuspenseListComponent(
   } else {
     suspenseContext = setDefaultShallowSuspenseListContext(suspenseContext);
   }
+  suspenseContext |= InSuspenseList;
   pushSuspenseListContext(workInProgress, suspenseContext);
 
   validateRevealOrder(revealOrder);
