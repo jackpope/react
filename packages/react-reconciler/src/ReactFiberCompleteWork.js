@@ -1580,6 +1580,7 @@ function completeWork(
       if (
         (workInProgress.flags & DidCapture) === NoFlags &&
         hasSuspenseListContext(suspenseContext, InSuspenseList) &&
+        (workInProgress.subtreeFlags & MaySuspendCommit) !== NoFlags &&
         (workInProgress.subtreeFlags & SuspenseyCommitPending) !== NoFlags
       ) {
         workInProgress.flags |= DidCapture;
