@@ -124,6 +124,8 @@ import {
   addViewTransitionFinishedListener,
   createViewTransitionInstance,
   flushHydrationEvents,
+  suspendInstance,
+  maySuspendCommitInSyncRender,
 } from './ReactFiberConfig';
 
 import {createWorkInProgress, resetWorkInProgress} from './ReactFiber';
@@ -213,6 +215,7 @@ import {
   claimNextTransitionDeferredLane,
   checkIfRootIsPrerendering,
   includesOnlyViewTransitionEligibleLanes,
+  includesOnlySuspenseyCommitEligibleLanes,
   isGestureRender,
   GestureLane,
   SomeTransitionLane,
@@ -1548,6 +1551,104 @@ function finishConcurrentRender(
   }
 }
 
+function setupPerBoundarySuspenseySubscriptions(
+  root: FiberRoot,
+  finishedWork: Fiber,
+  lanes: Lanes,
+): void {
+  const cancelFns: Array<() => void> = [];
+  collectSuspenseListBoundaries(finishedWork, cancelFns, lanes);
+  if (cancelFns.length > 0) {
+    root.cancelPendingBoundaryCommits = cancelFns;
+  }
+}
+
+function collectSuspenseListBoundaries(
+  fiber: Fiber,
+  cancelFns: Array<() => void>,
+  lanes: Lanes,
+): void {
+  if (fiber.tag === SuspenseListComponent) {
+    // Walk direct Suspense children
+    let child = fiber.child;
+    while (child !== null) {
+      if (
+        child.tag === SuspenseComponent &&
+        child.memoizedState !== null // in fallback state
+      ) {
+        // Check if this boundary has a hidden primary tree with pending resources
+        const offscreen = child.child; // First child is Offscreen
+        if (offscreen !== null && offscreen.tag === OffscreenComponent) {
+          const isHidden = offscreen.memoizedState !== null;
+          if (isHidden) {
+            subscribeToBoundaryResources(child, offscreen, cancelFns, lanes);
+          }
+        }
+      }
+      child = child.sibling;
+    }
+  }
+
+  // Recurse into children to find nested SuspenseLists
+  let child = fiber.child;
+  while (child !== null) {
+    collectSuspenseListBoundaries(child, cancelFns, lanes);
+    child = child.sibling;
+  }
+}
+
+function subscribeToBoundaryResources(
+  boundary: Fiber,
+  offscreen: Fiber,
+  cancelFns: Array<() => void>,
+  lanes: Lanes,
+): void {
+  const boundarySuspendedState = startSuspendingCommit();
+  // Walk the hidden primary tree looking for suspensey resources
+  walkForSuspenseyInstances(offscreen, boundarySuspendedState, lanes);
+  const schedulePendingCommit = waitForCommitToBeReady(
+    boundarySuspendedState,
+    0, // no timeout offset for per-boundary
+  );
+  if (schedulePendingCommit !== null) {
+    // Resources not ready — subscribe
+    const cancel = schedulePendingCommit(() => {
+      retryTimedOutBoundary(boundary, claimNextRetryLane());
+    });
+    cancelFns.push(cancel);
+  } else {
+    // All resources already ready — schedule immediate retry
+    retryTimedOutBoundary(boundary, claimNextRetryLane());
+  }
+}
+
+function walkForSuspenseyInstances(
+  fiber: Fiber,
+  suspendedState: SuspendedState,
+  lanes: Lanes,
+): void {
+  if (
+    (fiber.tag === HostComponent || fiber.tag === HostHoistable) &&
+    (fiber.flags & MaySuspendCommit) !== NoFlags
+  ) {
+    const instance = fiber.stateNode;
+    const type = fiber.type;
+    const props = fiber.memoizedProps;
+    if (
+      includesOnlySuspenseyCommitEligibleLanes(lanes) ||
+      maySuspendCommitInSyncRender(type, props)
+    ) {
+      suspendInstance(suspendedState, instance, type, props);
+    }
+  }
+  // Recurse into children
+  let child = fiber.child;
+  while (child !== null) {
+    walkForSuspenseyInstances(child, suspendedState, lanes);
+    child = child.sibling;
+  }
+}
+
 function completeRootWhenReady(
   root: FiberRoot,
   finishedWork: Fiber,
@@ -1589,6 +1690,9 @@ function completeRootWhenReady(
     // This will also track any newly added or appearing ViewTransition
     // components for the purposes of forming pairs.
     accumulateSuspenseyCommit(finishedWork, lanes, suspendedState);
+    // Set up per-boundary subscriptions for SuspenseList children
+    // that have pending suspensey resources (absorbed during completeWork).
+    setupPerBoundarySuspenseySubscriptions(root, finishedWork, lanes);
     if (
       isViewTransitionEligible ||
       (isGestureTransition &&
@@ -2220,6 +2324,13 @@ function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
   if (cancelPendingCommit !== null) {
     root.cancelPendingCommit = null;
     cancelPendingCommit();
+  }
+  const cancelPendingBoundaryCommits = root.cancelPendingBoundaryCommits;
+  if (cancelPendingBoundaryCommits !== null) {
+    root.cancelPendingBoundaryCommits = null;
+    for (let i = 0; i < cancelPendingBoundaryCommits.length; i++) {
+      cancelPendingBoundaryCommits[i]();
+    }
   }
 
   pendingEffectsLanes = NoLanes;

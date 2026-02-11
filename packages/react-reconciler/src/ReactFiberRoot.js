@@ -67,6 +67,7 @@ function FiberRootNode(
   this.pingCache = null;
   this.timeoutHandle = noTimeout;
   this.cancelPendingCommit = null;
+  this.cancelPendingBoundaryCommits = null;
   this.context = null;
   this.pendingContext = null;
   this.next = null;

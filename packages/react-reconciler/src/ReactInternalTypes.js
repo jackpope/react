@@ -229,6 +229,9 @@ type BaseFiberRootProperties = {
   // cancel it.
   // TODO: Can this be consolidated with timeoutHandle?
   cancelPendingCommit: null | (() => void),
+  // Cleanup functions for per-boundary suspensey resource subscriptions.
+  // Used when SuspenseList children have pending suspensey resources.
+  cancelPendingBoundaryCommits: null | Array<() => void>,
   // Top context object, used by renderSubtreeIntoContainer
   context: Object | null,
   pendingContext: Object | null,
