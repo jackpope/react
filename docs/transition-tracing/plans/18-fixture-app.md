@@ -58,7 +58,9 @@ fixtures/transition-tracing/
 }
 ```
 
-Requires building React with `enableTransitionTracing = true` in the experimental build.
+## Build script
+
+Running the fixture successfully requires enabling `enableTransitionTracing` in experimental. We should extend the build script to allow feature flag overrides. That way we can have a custom `yarn build-for-tt-dev` that is similar to `yarn build-for-vt-dev`, but it overrides the flag during build. This should not mutate the actual file so we don't have to worry about git changes for these builds.
 
 ---
 
