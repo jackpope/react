@@ -1,0 +1,70 @@
+.page {
+}
+
+.content {
+  padding: 16px 0;
+}
+
+.content h3 {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.meta {
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.errorToggle {
+  padding: 6px 14px;
+  margin-bottom: 16px;
+  cursor: pointer;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.errorToggle:hover {
+  color: #e6edf3;
+  border-color: #8b949e;
+}
+
+.errorToggleActive {
+  composes: errorToggle;
+  background-color: #da3633;
+  border-color: #da3633;
+  color: #fff;
+}
+
+.errorToggleActive:hover {
+  border-color: #da3633;
+}
+
+.errorDisplay {
+  padding: 16px 0;
+  color: #f85149;
+}
+
+.errorDisplay h3 {
+  margin: 0 0 6px;
+}
+
+.retryButton {
+  padding: 6px 14px;
+  cursor: pointer;
+  margin-top: 8px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.retryButton:hover {
+  color: #e6edf3;
+  border-color: #8b949e;
+}

@@ -1,0 +1,19 @@
+{
+  "name": "transition-tracing-fixture",
+  "private": true,
+  "dependencies": {
+    "react": "experimental",
+    "react-dom": "experimental"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.1",
+    "vite": "^8.0.0"
+  },
+  "scripts": {
+    "predev": "cp -a ../../build/oss-experimental/. node_modules && rm -rf node_modules/.vite",
+    "dev": "vite",
+    "prebuild": "cp -a ../../build/oss-experimental/. node_modules",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}

@@ -1,0 +1,37 @@
+.nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 24px;
+  background-color: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+
+.button {
+  padding: 6px 14px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-family: inherit;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.button:hover {
+  color: #e6edf3;
+  border-color: #8b949e;
+}
+
+.buttonActive {
+  composes: button;
+  background-color: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.buttonActive:hover {
+  border-color: #1f6feb;
+}
