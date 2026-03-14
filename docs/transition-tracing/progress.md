@@ -21,16 +21,17 @@ The feature exists in the codebase behind a feature flag (off in all production 
 ## Plans
 
 ### P0 -- Project health and testing
-- [ ] **17 - Test Coverage Expansion**: Add tests for `onTransitionIncomplete`, error boundaries, `useTransition` hook, interruption, DOM renderer, and SSR/hydration. Currently 22 tests in one file with noop renderer only.
-- [ ] **18 - Fixture App**: Create `fixtures/transition-tracing/` with interactive scenarios, callback dashboard, and configurable delays for manual testing.
-- [ ] **10 - DevTools Integration**: Phase 1: show `name` prop in component tree + inspector state. Phase 2: Chrome custom performance track via `console.timeStamp()` (following existing scheduler/component track patterns). Phase 3 (optional): `performance.mark()` hooks bridge. Medium effort.
+- [x] **17 - Test Coverage Expansion**: Add tests for `onTransitionIncomplete`, error boundaries, `useTransition` hook, interruption, DOM renderer, and SSR/hydration. Currently 22 tests in one file with noop renderer only.
+- [x] **18 - Fixture App**: Create `fixtures/transition-tracing/` with interactive scenarios, callback dashboard, and configurable delays for manual testing.
+- [x] **10 - DevTools Integration**: Phase 1: show `name` prop in component tree + inspector state. Phase 2: Chrome custom performance track via `console.timeStamp()` (following existing scheduler/component track patterns). Phase 3 (optional): `performance.mark()` hooks bridge. Medium effort.
 
 
 ### P1 -- Core correctness
 
-- [ ] **02 - onTransitionIncomplete**: Implement the 7th callback accumulator. The callback type exists but is dead code -- never dispatched in `processTransitionCallbacks`.
+- [x] **02 - onTransitionIncomplete**: Implement the 7th callback accumulator. The callback type exists but is dead code -- never dispatched in `processTransitionCallbacks`.
 - [ ] **08 - Mutable Pending Array**: Clone `SuspenseInfo` objects in `onMarkerProgress` and `onTransitionProgress` callbacks so users can't mutate React internals. Trivial fix (~6 lines).
-- [ ] **09 - Abort Metadata**: Expand `TransitionAbort` type with `endTime`, `newName`, `error`, `componentStack`. Wire up `'error'` and `'unknown'` abort reasons (currently dead).
+- [x] **09 - Abort Metadata**: Expand `TransitionAbort` type with `endTime`, `newName`, `error`, `componentStack`. Wire up `'error'` and `'unknown'` abort reasons (currently dead). Error boundary integration (Phase 3) deferred.
+- [ ] **12 - Batched Disambiguation**: Better handling of batched/superseded transitions. When a newer transition interrupts an in-progress one, the interrupted transition's markers are incorrectly attributed as complete, and the new transition gets almost no tracked work.
 - [ ] **13 - Marker Name Change Fix**: Handle marker name changes in begin work update path. Add `newName` to `TransitionAbort`. Unskip test 12.
 - [ ] **15 - Pre-rendering Exclusion**: Exclude pre-rendered (OffscreenLane) trees from transition metrics. Deferred until `<Activity>` semantics stabilize.
 
@@ -42,7 +43,6 @@ The feature exists in the codebase behind a feature flag (off in all production 
 
 ### P3 -- Nice to have / Defer
 
-- [ ] **12 - Batched Disambiguation**: Better handling of batched/superseded transitions. RFC's naming convention workaround is functional for V1.
 - [ ] **16 - Redundant clearTransitionsForLanes**: Remove first of two identical `clearTransitionsForLanes` calls in HostRoot passive mount. 1 line removed, trivial.
 
 ### Consider later

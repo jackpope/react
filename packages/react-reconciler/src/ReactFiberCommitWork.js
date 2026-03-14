@@ -192,6 +192,7 @@ import {
   addTransitionStartCallbackToPendingTransition,
   addTransitionProgressCallbackToPendingTransition,
   addTransitionCompleteCallbackToPendingTransition,
+  addTransitionIncompleteCallbackToPendingTransition,
   addMarkerProgressCallbackToPendingTransition,
   addMarkerIncompleteCallbackToPendingTransition,
   addMarkerCompleteCallbackToPendingTransition,
@@ -287,6 +288,7 @@ import {
   untrackNamedViewTransition,
 } from './ReactFiberDuplicateViewTransitions';
 import {markIndicatorHandled} from './ReactFiberRootScheduler';
+import {now} from './Scheduler';
 import type {Flags} from './ReactFiberFlags';
 
 // Used during the commit phase to track the state of the Offscreen component stack.
@@ -3755,6 +3757,11 @@ function commitPassiveMountOnFiber(
             if (pendingBoundaries === null || pendingBoundaries.size === 0) {
               if (markerInstance.aborts === null) {
                 addTransitionCompleteCallbackToPendingTransition(transition);
+              } else {
+                addTransitionIncompleteCallbackToPendingTransition(
+                  transition,
+                  markerInstance.aborts,
+                );
               }
               incompleteTransitions.delete(transition);
             }
@@ -5181,6 +5188,7 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
           const abortReason: TransitionAbort = {
             reason: 'suspense',
             name: current.memoizedProps.name || null,
+            endTime: now(),
           };
           if (
             current.memoizedState === null ||
@@ -5222,6 +5230,7 @@ function commitPassiveUnmountInsideDeletedTreeOnFiber(
           const abortReason: TransitionAbort = {
             reason: 'marker',
             name: current.memoizedProps.name,
+            endTime: now(),
           };
           abortParentMarkerTransitionsForDeletedFiber(
             current,

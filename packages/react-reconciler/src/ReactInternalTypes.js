@@ -329,7 +329,10 @@ export type TransitionTracingCallbacks = {
     deletions: Array<{
       type: string,
       name?: string | null,
+      newName?: string | null,
       endTime: number,
+      error?: mixed,
+      componentStack?: string | null,
     }>,
   ) => void,
   onTransitionComplete?: (
@@ -351,7 +354,10 @@ export type TransitionTracingCallbacks = {
     deletions: Array<{
       type: string,
       name?: string | null,
+      newName?: string | null,
       endTime: number,
+      error?: mixed,
+      componentStack?: string | null,
     }>,
   ) => void,
   onMarkerComplete?: (

@@ -66,6 +66,7 @@ export default function SearchPage() {
       <TracingMarker name="search">
         <ErrorBoundary>
           <Suspense
+            name="search:results"
             fallback={
               <div className={styles.meta}>Loading search results...</div>
             }>

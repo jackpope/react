@@ -22,6 +22,7 @@ import {getWorkInProgressTransitions} from './ReactFiberWorkLoop';
 import {
   logTransitionTracingStart,
   logTransitionTracingComplete,
+  logTransitionTracingIncomplete,
   logMarkerTracingComplete,
   logMarkerTracingIncomplete,
   logMarkerTracingProgress,
@@ -33,6 +34,10 @@ export type PendingTransitionCallbacks = {
   transitionStart: Array<Transition> | null,
   transitionProgress: Map<Transition, PendingBoundaries> | null,
   transitionComplete: Array<Transition> | null,
+  transitionIncomplete: Map<
+    Transition,
+    {aborts: Array<TransitionAbort>},
+  > | null,
   markerProgress: Map<
     string,
     {pendingBoundaries: PendingBoundaries, transitions: Set<Transition>},
@@ -56,6 +61,10 @@ export type TracingMarkerInstance = {
 export type TransitionAbort = {
   reason: 'error' | 'unknown' | 'marker' | 'suspense',
   name?: string | null,
+  newName?: string | null,
+  endTime: number,
+  error?: mixed,
+  componentStack?: string | null,
 };
 
 export const TransitionRoot = 0;
@@ -152,20 +161,48 @@ export function processTransitionCallbacks(
           transitions.forEach(transition => {
             const filteredAborts = [];
             aborts.forEach(abort => {
+              const abortEndTime = abort.endTime != null ? abort.endTime : endTime;
               switch (abort.reason) {
                 case 'marker': {
-                  filteredAborts.push({
+                  const deletion: {
+                    type: string,
+                    name: string | void | null,
+                    endTime: number,
+                    newName?: string | null,
+                  } = {
                     type: 'marker',
                     name: abort.name,
-                    endTime,
-                  });
+                    endTime: abortEndTime,
+                  };
+                  if (abort.newName != null) {
+                    deletion.newName = abort.newName;
+                  }
+                  filteredAborts.push(deletion);
                   break;
                 }
                 case 'suspense': {
                   filteredAborts.push({
                     type: 'suspense',
                     name: abort.name,
-                    endTime,
+                    endTime: abortEndTime,
+                  });
+                  break;
+                }
+                case 'error': {
+                  filteredAborts.push({
+                    type: 'error',
+                    name: abort.name,
+                    endTime: abortEndTime,
+                    error: abort.error,
+                    componentStack: abort.componentStack,
+                  });
+                  break;
+                }
+                case 'unknown': {
+                  filteredAborts.push({
+                    type: 'unknown',
+                    name: abort.name,
+                    endTime: abortEndTime,
                   });
                   break;
                 }
@@ -225,6 +262,81 @@ export function processTransitionCallbacks(
               );
             }
             logTransitionTracingComplete(
+              name,
+              transition.startTime,
+              endTime,
+            );
+          }
+        });
+      }
+
+      const transitionIncomplete = pendingTransitions.transitionIncomplete;
+      const onTransitionIncomplete = callbacks.onTransitionIncomplete;
+      if (transitionIncomplete !== null) {
+        transitionIncomplete.forEach(({aborts}, transition) => {
+          const name = transition.name;
+          if (name != null) {
+            const filteredAborts = [];
+            aborts.forEach(abort => {
+              const abortEndTime = abort.endTime != null ? abort.endTime : endTime;
+              switch (abort.reason) {
+                case 'marker': {
+                  const deletion: {
+                    type: string,
+                    name: string | void | null,
+                    endTime: number,
+                    newName?: string | null,
+                  } = {
+                    type: 'marker',
+                    name: abort.name,
+                    endTime: abortEndTime,
+                  };
+                  if (abort.newName != null) {
+                    deletion.newName = abort.newName;
+                  }
+                  filteredAborts.push(deletion);
+                  break;
+                }
+                case 'suspense': {
+                  filteredAborts.push({
+                    type: 'suspense',
+                    name: abort.name,
+                    endTime: abortEndTime,
+                  });
+                  break;
+                }
+                case 'error': {
+                  filteredAborts.push({
+                    type: 'error',
+                    name: abort.name,
+                    endTime: abortEndTime,
+                    error: abort.error,
+                    componentStack: abort.componentStack,
+                  });
+                  break;
+                }
+                case 'unknown': {
+                  filteredAborts.push({
+                    type: 'unknown',
+                    name: abort.name,
+                    endTime: abortEndTime,
+                  });
+                  break;
+                }
+                default: {
+                  break;
+                }
+              }
+            });
+
+            if (filteredAborts.length > 0 && onTransitionIncomplete != null) {
+              onTransitionIncomplete(
+                name,
+                transition.startTime,
+                filteredAborts,
+              );
+            }
+            logTransitionTracingIncomplete(
               name,
               transition.startTime,
               endTime,

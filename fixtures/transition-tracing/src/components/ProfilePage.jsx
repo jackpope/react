@@ -46,16 +46,19 @@ export default function ProfilePage({id}) {
   return (
     <TracingMarker name="profile">
       <Suspense
+        name="profile:header"
         fallback={<div className={styles.meta}>Loading profile header...</div>}>
         <ProfileHeader id={id} />
         <TracingMarker name="profile:photo-feed">
           <Suspense
+            name="profile:photo-feed:suspense"
             fallback={<div className={styles.meta}>Loading photo feed...</div>}>
             <PhotoFeed id={id} />
           </Suspense>
         </TracingMarker>
         <TracingMarker name="profile:profile-feed">
           <Suspense
+            name="profile:profile-feed:suspense"
             fallback={
               <div className={styles.meta}>Loading profile feed...</div>
             }>

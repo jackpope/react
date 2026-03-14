@@ -551,6 +551,7 @@ export function addTransitionStartCallbackToPendingTransition(
         transitionStart: [],
         transitionProgress: null,
         transitionComplete: null,
+        transitionIncomplete: null,
         markerProgress: null,
         markerIncomplete: null,
         markerComplete: null,
@@ -577,6 +578,7 @@ export function addMarkerProgressCallbackToPendingTransition(
         transitionStart: null,
         transitionProgress: null,
         transitionComplete: null,
+        transitionIncomplete: null,
         markerProgress: new Map(),
         markerIncomplete: null,
         markerComplete: null,
@@ -605,6 +607,7 @@ export function addMarkerIncompleteCallbackToPendingTransition(
         transitionStart: null,
         transitionProgress: null,
         transitionComplete: null,
+        transitionIncomplete: null,
         markerProgress: null,
         markerIncomplete: new Map(),
         markerComplete: null,
@@ -632,6 +635,7 @@ export function addMarkerCompleteCallbackToPendingTransition(
         transitionStart: null,
         transitionProgress: null,
         transitionComplete: null,
+        transitionIncomplete: null,
         markerProgress: null,
         markerIncomplete: null,
         markerComplete: new Map(),
@@ -659,6 +663,7 @@ export function addTransitionProgressCallbackToPendingTransition(
         transitionStart: null,
         transitionProgress: new Map(),
         transitionComplete: null,
+        transitionIncomplete: null,
         markerProgress: null,
         markerIncomplete: null,
         markerComplete: null,
@@ -685,6 +690,7 @@ export function addTransitionCompleteCallbackToPendingTransition(
         transitionStart: null,
         transitionProgress: null,
         transitionComplete: [],
+        transitionIncomplete: null,
         markerProgress: null,
         markerIncomplete: null,
         markerComplete: null,
@@ -697,6 +703,33 @@ export function addTransitionCompleteCallbackToPendingTransition(
     }
 
     currentPendingTransitionCallbacks.transitionComplete.push(transition);
+  }
+}
+
+export function addTransitionIncompleteCallbackToPendingTransition(
+  transition: Transition,
+  aborts: Array<TransitionAbort>,
+) {
+  if (enableTransitionTracing) {
+    if (currentPendingTransitionCallbacks === null) {
+      currentPendingTransitionCallbacks = {
+        transitionStart: null,
+        transitionProgress: null,
+        transitionComplete: null,
+        transitionIncomplete: new Map(),
+        markerProgress: null,
+        markerIncomplete: null,
+        markerComplete: null,
+      };
+    }
+
+    if (currentPendingTransitionCallbacks.transitionIncomplete === null) {
+      currentPendingTransitionCallbacks.transitionIncomplete = new Map();
+    }
+
+    currentPendingTransitionCallbacks.transitionIncomplete.set(transition, {
+      aborts,
+    });
   }
 }
 

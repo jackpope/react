@@ -2570,9 +2570,7 @@ describe('ReactInteractionTracing', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('should call onTransitionIncomplete when all markers are deleted before transition completes', async () => {
-    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+  it('should call onTransitionIncomplete when all markers are deleted before transition completes', async () => {
     const transitionCallbacks = {
       onTransitionStart: (name, startTime) => {
         Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
@@ -2659,9 +2657,7 @@ describe('ReactInteractionTracing', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('should not call onTransitionIncomplete when transition completes normally', async () => {
-    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+  it('should not call onTransitionIncomplete when transition completes normally', async () => {
     const transitionCallbacks = {
       onTransitionStart: (name, startTime) => {
         Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
@@ -2731,9 +2727,7 @@ describe('ReactInteractionTracing', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('should call onTransitionIncomplete for one transition while another completes', async () => {
-    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+  it('should call onTransitionIncomplete for one transition while another completes', async () => {
     const transitionCallbacks = {
       onTransitionStart: (name, startTime) => {
         Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
@@ -2854,9 +2848,7 @@ describe('ReactInteractionTracing', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('should call onTransitionIncomplete when markers are deleted by navigation', async () => {
-    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+  it('should call onTransitionIncomplete when markers are deleted by navigation', async () => {
     const transitionCallbacks = {
       onTransitionStart: (name, startTime) => {
         Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
@@ -2943,6 +2935,198 @@ describe('ReactInteractionTracing', () => {
         'Home',
         'onMarkerIncomplete(navigate, page-marker, 1000, [{endTime: 3000, name: page-marker, type: marker}])',
         'onTransitionIncomplete(navigate, 1000, [{endTime: 3000, name: page-marker, type: marker}])',
+      ]);
+    });
+  });
+
+  // @gate enableTransitionTracing
+  it('abort endTime reflects when the abort was detected', async () => {
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setShow;
+    function App() {
+      const [show, _setShow] = useState(true);
+      setShow = _setShow;
+      return (
+        <div>
+          {show ? (
+            <React.unstable_TracingMarker name="marker">
+              <Suspense
+                name="suspense one"
+                fallback={<Text text="Loading..." />}>
+                <AsyncText text="Content" />
+              </Suspense>
+            </React.unstable_TracingMarker>
+          ) : (
+            <Text text="Hidden" />
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll([
+        'Suspend [Content]',
+        'Loading...',
+        // pre-warming
+        'Suspend [Content]',
+        // end pre-warming
+      ]);
+
+      startTransition(
+        () => root.render(<App />),
+        {name: 'transition'},
+      );
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll([
+        'Suspend [Content]',
+        'Loading...',
+        // pre-warming
+        'Suspend [Content]',
+        // end pre-warming
+        'onTransitionStart(transition, 1000)',
+      ]);
+
+      // Now delete the marker at time 3000
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await act(async () => {
+        setShow(false);
+      });
+
+      // The abort endTime should reflect when the abort was detected (3000)
+      assertLog([
+        'Hidden',
+        'onMarkerIncomplete(transition, marker, 1000, [{endTime: 3000, name: marker, type: marker}])',
+        'onTransitionIncomplete(transition, 1000, [{endTime: 3000, name: marker, type: marker}])',
+      ]);
+    });
+  });
+
+  // @gate enableTransitionTracing
+  it('suspense abort includes suspense boundary name', async () => {
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setShow;
+    function App() {
+      const [show, _setShow] = useState(true);
+      setShow = _setShow;
+      return (
+        <div>
+          {show ? (
+            <Suspense
+              name="my-boundary"
+              fallback={<Text text="Loading..." />}>
+              <AsyncText text="Content" />
+            </Suspense>
+          ) : (
+            <Text text="Gone" />
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll([
+        'Suspend [Content]',
+        'Loading...',
+        // pre-warming
+        'Suspend [Content]',
+        // end pre-warming
+      ]);
+
+      startTransition(
+        () => root.render(<App />),
+        {name: 'load'},
+      );
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll([
+        'Suspend [Content]',
+        'Loading...',
+        // pre-warming
+        'Suspend [Content]',
+        // end pre-warming
+        'onTransitionStart(load, 1000)',
+      ]);
+
+      // Delete the suspense boundary at time 3000
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await act(async () => {
+        setShow(false);
+      });
+
+      // The deletion should include type: suspense and the boundary name
+      assertLog([
+        'Gone',
+        'onTransitionIncomplete(load, 1000, [{endTime: 3000, name: my-boundary, type: suspense}])',
       ]);
     });
   });
