@@ -2568,4 +2568,382 @@ describe('ReactInteractionTracing', () => {
       'onTransitionComplete(transition two, 0, 3000) /root two/',
     ]);
   });
+
+  // @gate enableTransitionTracing
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should call onTransitionIncomplete when all markers are deleted before transition completes', async () => {
+    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setNavigate;
+    function App() {
+      const [navigate, _setNavigate] = useState(false);
+      setNavigate = _setNavigate;
+
+      return (
+        <div>
+          {navigate ? (
+            <React.unstable_TracingMarker name="marker">
+              <Suspense fallback={<Text text="Loading..." />}>
+                <AsyncText text="Page Two" />
+              </Suspense>
+            </React.unstable_TracingMarker>
+          ) : (
+            <Text text="Page One" />
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Page One']);
+
+      startTransition(() => setNavigate(true), {name: 'nav'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [Page Two]',
+        'Loading...',
+        'onTransitionStart(nav, 1000)',
+      ]);
+
+      // Delete the marker subtree before the transition completes
+      await act(async () => {
+        startTransition(() => setNavigate(false));
+        ReactNoop.expire(1000);
+        await advanceTimers(1000);
+      });
+
+      // onTransitionIncomplete should fire since all markers were deleted
+      assertLog([
+        'Page One',
+        'onMarkerIncomplete(nav, marker, 1000, [{endTime: 3000, name: marker, type: marker}])',
+        'onTransitionIncomplete(nav, 1000, [{endTime: 3000, name: marker, type: marker}])',
+      ]);
+    });
+  });
+
+  // @gate enableTransitionTracing
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should not call onTransitionIncomplete when transition completes normally', async () => {
+    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setNavigate;
+    function App() {
+      const [navigate, _setNavigate] = useState(false);
+      setNavigate = _setNavigate;
+
+      return (
+        <div>
+          {navigate ? (
+            <React.unstable_TracingMarker name="marker">
+              <Suspense fallback={<Text text="Loading..." />}>
+                <AsyncText text="Page Two" />
+              </Suspense>
+            </React.unstable_TracingMarker>
+          ) : (
+            <Text text="Page One" />
+          )}
+        </div>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Page One']);
+
+      startTransition(() => setNavigate(true), {name: 'nav'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [Page Two]',
+        'Loading...',
+        'onTransitionStart(nav, 1000)',
+      ]);
+
+      // Resolve the suspense -- transition completes normally
+      resolveText('Page Two');
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll(['Page Two', 'onTransitionComplete(nav, 1000, 3000)']);
+
+      // onTransitionIncomplete should NOT have been called
+    });
+  });
+
+  // @gate enableTransitionTracing
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should call onTransitionIncomplete for one transition while another completes', async () => {
+    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onMarkerComplete: (transitionName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitionName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+    };
+
+    let setShowA;
+    let setShowB;
+    function App() {
+      const [showA, _setShowA] = useState(false);
+      const [showB, _setShowB] = useState(false);
+      setShowA = _setShowA;
+      setShowB = _setShowB;
+
+      return (
+        <div>
+          {showA ? (
+            <React.unstable_TracingMarker name="marker-a">
+              <Suspense fallback={<Text text="Loading A..." />}>
+                <AsyncText text="A" />
+              </Suspense>
+            </React.unstable_TracingMarker>
+          ) : null}
+          {showB ? (
+            <React.unstable_TracingMarker name="marker-b">
+              <Suspense fallback={<Text text="Loading B..." />}>
+                <AsyncText text="B" />
+              </Suspense>
+            </React.unstable_TracingMarker>
+          ) : null}
+          <Text text="Home" />
+        </div>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Home']);
+
+      // Start transition A
+      startTransition(() => setShowA(true), {name: 'transition-a'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [A]',
+        'Loading A...',
+        'Home',
+        'onTransitionStart(transition-a, 1000)',
+      ]);
+
+      // Start transition B
+      startTransition(() => setShowB(true), {name: 'transition-b'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [A]',
+        'Loading A...',
+        'Suspend [B]',
+        'Loading B...',
+        'Home',
+        'onTransitionStart(transition-b, 2000)',
+      ]);
+
+      // Delete marker A (incomplete), resolve B (complete)
+      await act(async () => {
+        setShowA(false);
+        resolveText('B');
+        ReactNoop.expire(1000);
+        await advanceTimers(1000);
+      });
+
+      // transition-a should be incomplete, transition-b should complete
+      assertLog([
+        'B',
+        'Home',
+        'onMarkerIncomplete(transition-a, marker-a, 1000, [{endTime: 4000, name: marker-a, type: marker}])',
+        'onTransitionIncomplete(transition-a, 1000, [{endTime: 4000, name: marker-a, type: marker}])',
+        'onMarkerComplete(transition-b, marker-b, 2000, 4000)',
+        'onTransitionComplete(transition-b, 2000, 4000)',
+      ]);
+    });
+  });
+
+  // @gate enableTransitionTracing
+  // eslint-disable-next-line jest/no-disabled-tests
+  it.skip('should call onTransitionIncomplete when markers are deleted by navigation', async () => {
+    // skip: requires Plan 02 (onTransitionIncomplete implementation)
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setPage;
+    function App() {
+      const [page, _setPage] = useState('home');
+      setPage = _setPage;
+
+      if (page === 'home') {
+        return <Text text="Home" />;
+      }
+
+      return (
+        <React.unstable_TracingMarker name="page-marker">
+          <Suspense fallback={<Text text="Loading..." />}>
+            <AsyncText text="Page Content" />
+          </Suspense>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Home']);
+
+      // Navigate to page (transition starts, suspends)
+      startTransition(() => setPage('page'), {name: 'navigate'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [Page Content]',
+        'Loading...',
+        'onTransitionStart(navigate, 1000)',
+      ]);
+
+      // User navigates back before content loads (markers removed)
+      await act(async () => {
+        startTransition(() => setPage('home'));
+        ReactNoop.expire(1000);
+        await advanceTimers(1000);
+      });
+
+      // Transition should be incomplete since markers were removed by navigation
+      assertLog([
+        'Home',
+        'onMarkerIncomplete(navigate, page-marker, 1000, [{endTime: 3000, name: page-marker, type: marker}])',
+        'onTransitionIncomplete(navigate, 1000, [{endTime: 3000, name: page-marker, type: marker}])',
+      ]);
+    });
+  });
 });
