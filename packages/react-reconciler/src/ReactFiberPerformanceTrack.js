@@ -37,6 +37,7 @@ import {
   enableProfilerTimer,
   enableGestureTransition,
   enablePerformanceIssueReporting,
+  enableTransitionTracing,
 } from 'shared/ReactFeatureFlags';
 
 const supportsUserTiming =
@@ -51,6 +52,7 @@ const supportsUserTiming =
 
 const COMPONENTS_TRACK = 'Components ⚛';
 const LANES_TRACK_GROUP = 'Scheduler ⚛';
+const TRANSITIONS_TRACK_GROUP = 'Transitions ⚛';
 
 let currentTrack: string = 'Blocking'; // Lane
 
@@ -106,6 +108,16 @@ export function markAllLanesInOrder() {
       LANES_TRACK_GROUP,
       'primary-light',
     );
+    if (enableTransitionTracing) {
+      console.timeStamp(
+        'Transitions Track',
+        0.003,
+        0.003,
+        'Transitions',
+        TRANSITIONS_TRACK_GROUP,
+        'primary-light',
+      );
+    }
   }
 }
 
@@ -1716,5 +1728,121 @@ export function logPassiveCommitPhase(
         'secondary-dark',
       );
     }
+  }
+}
+
+export function logTransitionTracingStart(
+  transitionName: string,
+  startTime: number,
+): void {
+  if (supportsUserTiming) {
+    console.timeStamp(
+      transitionName,
+      startTime,
+      startTime,
+      transitionName,
+      TRANSITIONS_TRACK_GROUP,
+      'primary-light',
+    );
+  }
+}
+
+export function logTransitionTracingComplete(
+  transitionName: string,
+  startTime: number,
+  endTime: number,
+): void {
+  if (supportsUserTiming) {
+    const duration = endTime - startTime;
+    let color;
+    if (duration < 100) {
+      color = 'primary-light';
+    } else if (duration < 1000) {
+      color = 'primary';
+    } else if (duration < 5000) {
+      color = 'primary-dark';
+    } else {
+      color = 'error';
+    }
+    console.timeStamp(
+      transitionName,
+      startTime,
+      endTime,
+      transitionName,
+      TRANSITIONS_TRACK_GROUP,
+      color,
+    );
+  }
+}
+
+export function logTransitionTracingIncomplete(
+  transitionName: string,
+  startTime: number,
+  endTime: number,
+): void {
+  if (supportsUserTiming) {
+    console.timeStamp(
+      transitionName + ' (incomplete)',
+      startTime,
+      endTime,
+      transitionName,
+      TRANSITIONS_TRACK_GROUP,
+      'warning',
+    );
+  }
+}
+
+export function logMarkerTracingComplete(
+  transitionName: string,
+  markerName: string,
+  startTime: number,
+  endTime: number,
+): void {
+  if (supportsUserTiming) {
+    console.timeStamp(
+      markerName,
+      startTime,
+      endTime,
+      transitionName,
+      TRANSITIONS_TRACK_GROUP,
+      'secondary',
+    );
+  }
+}
+
+export function logMarkerTracingIncomplete(
+  transitionName: string,
+  markerName: string,
+  startTime: number,
+  endTime: number,
+): void {
+  if (supportsUserTiming) {
+    console.timeStamp(
+      markerName + ' (incomplete)',
+      startTime,
+      endTime,
+      transitionName,
+      TRANSITIONS_TRACK_GROUP,
+      'warning',
+    );
+  }
+}
+
+export function logMarkerTracingProgress(
+  transitionName: string,
+  markerName: string,
+  time: number,
+  pendingBoundaries: Array<{name: string | null}>,
+): void {
+  if (supportsUserTiming) {
+    const label = markerName + ' (' + pendingBoundaries.length + ' pending)';
+    console.timeStamp(
+      label,
+      time,
+      time,
+      transitionName,
+      TRANSITIONS_TRACK_GROUP,
+      'secondary-light',
+    );
   }
 }

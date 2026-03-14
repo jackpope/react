@@ -2377,7 +2377,9 @@ export function attach(
           ? fiber.memoizedProps.name
           : fiber.tag === ActivityComponent
             ? fiber.memoizedProps.name
-            : null;
+            : fiber.tag === TracingMarkerComponent
+              ? fiber.memoizedProps.name
+              : null;
       const namePropString = nameProp == null ? null : String(nameProp);
       const namePropStringID = getStringID(namePropString);
 
@@ -6696,6 +6698,18 @@ export function attach(
       isSuspended = memoizedState !== null;
     }
 
+    let tracingMarkerData = null;
+    if (fiber.tag === TracingMarkerComponent && fiber.stateNode != null) {
+      const instance = fiber.stateNode;
+      const transitions = instance.transitions;
+      const pendingBoundaries = instance.pendingBoundaries;
+      tracingMarkerData = {
+        transitions: transitions ? Array.from(transitions).map(t => ({name: t.name, startTime: t.startTime})) : [],
+        pendingBoundaries: pendingBoundaries ? Array.from(pendingBoundaries.values()).map(info => info.name) : [],
+        status: instance.aborts != null ? 'incomplete' : (pendingBoundaries != null && pendingBoundaries.size > 0 ? 'pending' : 'complete'),
+      };
+    }
+
     const suspendedBy =
       fiberInstance.suspenseNode !== null
         ? // If this is a Suspense boundary, then we include everything in the subtree that might suspend
@@ -6802,6 +6816,7 @@ export function attach(
       suspendedBy: suspendedBy,
       suspendedByRange: suspendedByRange,
       unknownSuspenders: unknownSuspenders,
+      tracingMarkerData: tracingMarkerData,
 
       // List of owners
       owners,

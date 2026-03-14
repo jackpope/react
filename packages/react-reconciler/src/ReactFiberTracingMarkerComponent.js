@@ -19,6 +19,13 @@ import type {StackCursor} from './ReactFiberStack';
 import {enableTransitionTracing} from 'shared/ReactFeatureFlags';
 import {createCursor, push, pop} from './ReactFiberStack';
 import {getWorkInProgressTransitions} from './ReactFiberWorkLoop';
+import {
+  logTransitionTracingStart,
+  logTransitionTracingComplete,
+  logMarkerTracingComplete,
+  logMarkerTracingIncomplete,
+  logMarkerTracingProgress,
+} from './ReactFiberPerformanceTrack';
 
 export type SuspenseInfo = {name: string | null};
 
@@ -66,17 +73,21 @@ export function processTransitionCallbacks(
     if (pendingTransitions !== null) {
       const transitionStart = pendingTransitions.transitionStart;
       const onTransitionStart = callbacks.onTransitionStart;
-      if (transitionStart !== null && onTransitionStart != null) {
+      if (transitionStart !== null) {
         transitionStart.forEach(transition => {
-          if (transition.name != null) {
-            onTransitionStart(transition.name, transition.startTime);
+          const name = transition.name;
+          if (name != null) {
+            if (onTransitionStart != null) {
+              onTransitionStart(name, transition.startTime);
+            }
+            logTransitionTracingStart(name, transition.startTime);
           }
         });
       }
 
       const markerProgress = pendingTransitions.markerProgress;
       const onMarkerProgress = callbacks.onMarkerProgress;
-      if (onMarkerProgress != null && markerProgress !== null) {
+      if (markerProgress !== null) {
         markerProgress.forEach((markerInstance, markerName) => {
           if (markerInstance.transitions !== null) {
             // TODO: Clone the suspense object so users can't modify it
@@ -85,11 +96,20 @@ export function processTransitionCallbacks(
                 ? Array.from(markerInstance.pendingBoundaries.values())
                 : [];
             markerInstance.transitions.forEach(transition => {
-              if (transition.name != null) {
-                onMarkerProgress(
-                  transition.name,
+              const name = transition.name;
+              if (name != null) {
+                if (onMarkerProgress != null) {
+                  onMarkerProgress(
+                    name,
+                    markerName,
+                    transition.startTime,
+                    endTime,
+                    pending,
+                  );
+                }
+                logMarkerTracingProgress(
+                  name,
                   markerName,
-                  transition.startTime,
                   endTime,
                   pending,
                 );
@@ -101,12 +121,21 @@ export function processTransitionCallbacks(
 
       const markerComplete = pendingTransitions.markerComplete;
       const onMarkerComplete = callbacks.onMarkerComplete;
-      if (markerComplete !== null && onMarkerComplete != null) {
+      if (markerComplete !== null) {
         markerComplete.forEach((transitions, markerName) => {
           transitions.forEach(transition => {
-            if (transition.name != null) {
-              onMarkerComplete(
-                transition.name,
+            const name = transition.name;
+            if (name != null) {
+              if (onMarkerComplete != null) {
+                onMarkerComplete(
+                  name,
+                  markerName,
+                  transition.startTime,
+                  endTime,
+                );
+              }
+              logMarkerTracingComplete(
+                name,
                 markerName,
                 transition.startTime,
                 endTime,
@@ -118,7 +147,7 @@ export function processTransitionCallbacks(
 
       const markerIncomplete = pendingTransitions.markerIncomplete;
       const onMarkerIncomplete = callbacks.onMarkerIncomplete;
-      if (onMarkerIncomplete != null && markerIncomplete !== null) {
+      if (markerIncomplete !== null) {
         markerIncomplete.forEach(({transitions, aborts}, markerName) => {
           transitions.forEach(transition => {
             const filteredAborts = [];
@@ -146,15 +175,22 @@ export function processTransitionCallbacks(
               }
             });
 
-            if (filteredAborts.length > 0) {
-              if (transition.name != null) {
+            const name = transition.name;
+            if (name != null) {
+              if (filteredAborts.length > 0 && onMarkerIncomplete != null) {
                 onMarkerIncomplete(
-                  transition.name,
+                  name,
                   markerName,
                   transition.startTime,
                   filteredAborts,
                 );
               }
+              logMarkerTracingIncomplete(
+                name,
+                markerName,
+                transition.startTime,
+                endTime,
+              );
             }
           });
         });
@@ -177,11 +213,19 @@ export function processTransitionCallbacks(
 
       const transitionComplete = pendingTransitions.transitionComplete;
       const onTransitionComplete = callbacks.onTransitionComplete;
-      if (transitionComplete !== null && onTransitionComplete != null) {
+      if (transitionComplete !== null) {
         transitionComplete.forEach(transition => {
-          if (transition.name != null) {
-            onTransitionComplete(
-              transition.name,
+          const name = transition.name;
+          if (name != null) {
+            if (onTransitionComplete != null) {
+              onTransitionComplete(
+                name,
+                transition.startTime,
+                endTime,
+              );
+            }
+            logTransitionTracingComplete(
+              name,
               transition.startTime,
               endTime,
             );
