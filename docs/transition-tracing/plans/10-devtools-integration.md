@@ -1,14 +1,18 @@
-# Plan 10: DevTools Integration
+# Plan 10: DevTools Integration -- Chrome Performance Track
 
 ## Problem Statement
 
-No DevTools integration exists. Transition tracing data is only available through root-level callbacks. The implementation checklist says: "Integrate DevTools (use commit time to link Profiler data with transition tracing data)."
+No DevTools integration exists. Transition tracing data is only available through root-level callbacks. Users have no way to visualize transition lifecycles in their browser tooling.
+
+React already emits custom Chrome Performance tracks via `console.timeStamp()` for components, scheduler lanes (Blocking, Transition, Suspense, Idle), and render/commit phases. Transition tracing should follow the same pattern -- a dedicated "Transitions" track (or track group) in the Chrome Performance panel showing transition and marker lifecycles as timed entries.
+
+The DevTools Profiler panel is deprecated and should **not** be a target for this integration.
 
 ---
 
 ## What Already Exists
 
-TracingMarker has **partial** DevTools support:
+### TracingMarker in DevTools component tree
 
 | Aspect | Status |
 |--------|--------|
@@ -19,12 +23,21 @@ TracingMarker has **partial** DevTools support:
 | Not filtered by `shouldFilterFiber()` | Done |
 | `name` prop extracted for tree display | **NOT DONE** |
 | Transition state in inspector | **NOT DONE** |
-| Timeline visualization | **NOT DONE** |
-| Profiler data linking | **NOT DONE** |
+
+### Existing performance track infrastructure
+
+React uses `console.timeStamp(label, startTime, endTime, track, trackGroup, color)` to emit entries to Chrome's custom performance tracks. Key patterns in `ReactFiberPerformanceTrack.js`:
+
+- **Track constants**: `COMPONENTS_TRACK = 'Components ⚛'`, `LANES_TRACK_GROUP = 'Scheduler ⚛'`
+- **Track ordering**: `markAllLanesInOrder()` emits zero-width entries at time 0 to establish track order
+- **DEV vs prod**: In DEV, entries are emitted via `debugTask.run(console.timeStamp.bind(...))` for async stack trace attribution; in prod, direct `console.timeStamp()` calls
+- **`performance.measure()` with devtools detail**: Used in DEV for component renders to attach tooltip properties (changed props, self time, etc.)
+- **Color coding**: Uses Chrome's named colors (`primary`, `primary-light`, `secondary`, `warning`, `error`, etc.)
+- **Guard**: All behind `supportsUserTiming` check (requires `enableProfilerTimer` + `console.timeStamp` support)
 
 ---
 
-## Phase 1: Component Tree Support (Low effort, 1-2 days)
+## Phase 1: Component Tree Support (Low effort)
 
 ### 1a. Extract `name` prop
 
@@ -38,49 +51,141 @@ In `inspectElementRaw()`, expose `TracingMarkerInstance` data: transitions (name
 
 ---
 
-## Phase 2: Timeline Visualization (High effort, 1-2 weeks)
+## Phase 2: Chrome Performance Track (Medium effort)
 
-### 2a. Define transition event types
+Emit transition tracing events as entries on a custom Chrome Performance track, following the same `console.timeStamp()` pattern used by the existing scheduler and component tracks.
 
-**File**: `packages/react-devtools-timeline/src/types.js`
+### 2a. Define track constants
 
-Add `TransitionEvent` and `TransitionMarkerEvent` types. Extend `TimelineData` with `transitionEvents` array.
+**File**: `packages/react-reconciler/src/ReactFiberPerformanceTrack.js`
 
-### 2b. Add profiling hooks
+```js
+const TRANSITIONS_TRACK_GROUP = 'Transitions ⚛';
+```
 
-**File**: `packages/react-devtools-shared/src/backend/profilingHooks.js`
+Individual transitions get their own sub-track within the group, keyed by their `name`. Markers appear as nested entries within their transition's track.
 
-Implement `markTransitionStarted`, `markTransitionComplete`, `markTransitionProgress`, `markMarkerComplete`, `markMarkerProgress`, `markMarkerIncomplete` in `createProfilingHooks()`. Also emit `performance.mark()` calls for Chrome Performance panel.
+### 2b. Register tracks in `markAllLanesInOrder()`
 
-### 2c. Call hooks from reconciler
+**File**: `packages/react-reconciler/src/ReactFiberPerformanceTrack.js`
 
-In `processTransitionCallbacks` and HostRoot passive mount, call DevTools profiling hooks alongside user callbacks.
+Add a zero-width entry for the Transitions track group so it appears in the correct order in Chrome's Performance panel. Since individual transition tracks are dynamic (created per `startTransition` call with a `name`), we only need to register the group header.
 
-### 2d. Create TransitionEventsView
+Gate behind `enableTransitionTracing` feature flag.
 
-**File** (new): `packages/react-devtools-timeline/src/content-views/TransitionEventsView.js`
+### 2c. Add logging functions
 
-Model after `SuspenseEventsView.js`. Transitions as horizontal bars (start->end), markers as nested bars. Green=complete, yellow=pending, red=incomplete.
+**File**: `packages/react-reconciler/src/ReactFiberPerformanceTrack.js`
 
-### 2e. Wire up in CanvasPage
+Add functions following the existing patterns:
 
-Add view to layout. Add tooltip rendering in `EventTooltip.js`.
+```js
+export function logTransitionStart(
+  name: string,
+  startTime: number,
+): void {
+  // Emit a zero-width entry to mark transition start
+  // Track: transition name, TrackGroup: TRANSITIONS_TRACK_GROUP
+  // Color: primary-light
+}
+
+export function logTransitionComplete(
+  name: string,
+  startTime: number,
+  endTime: number,
+): void {
+  // Full-width entry spanning transition lifetime
+  // Color: primary (short) / primary-dark (long) / error (very long)
+}
+
+export function logTransitionIncomplete(
+  name: string,
+  startTime: number,
+  endTime: number,
+  abortReason: string,
+): void {
+  // Color: warning or error depending on abort reason
+}
+
+export function logMarkerComplete(
+  transitionName: string,
+  markerName: string,
+  startTime: number,
+  endTime: number,
+): void {
+  // Nested entry within the transition's track
+  // Label: markerName
+  // Color: secondary / secondary-light
+}
+
+export function logMarkerIncomplete(
+  transitionName: string,
+  markerName: string,
+  startTime: number,
+  endTime: number,
+  abortReason: string,
+): void {
+  // Color: warning
+}
+
+export function logMarkerProgress(
+  transitionName: string,
+  markerName: string,
+  time: number,
+  pendingBoundaries: Array<string>,
+): void {
+  // Zero-width marker with tooltip showing pending boundary names
+  // Color: secondary-light
+}
+```
+
+Color coding scheme:
+| Event | Color |
+|-------|-------|
+| Transition complete (< 100ms) | `primary-light` |
+| Transition complete (100ms - 1s) | `primary` |
+| Transition complete (> 1s) | `primary-dark` |
+| Transition complete (> 5s) | `error` |
+| Transition incomplete | `warning` |
+| Marker complete | `secondary` |
+| Marker incomplete | `warning` |
+| Marker progress | `secondary-light` |
+
+### 2d. Call logging functions from transition callback dispatch
+
+**File**: `packages/react-reconciler/src/ReactFiberTracingMarkerComponent.js`
+
+In `processTransitionCallbacks()`, after dispatching each user callback, call the corresponding `log*` function from `ReactFiberPerformanceTrack.js`. This keeps the Chrome track entries in sync with the callback data without duplicating the lifecycle detection logic.
+
+For `onTransitionStart`:
+```js
+if (onTransitionStart != null) {
+  onTransitionStart(transition.name, transition.startTime);
+}
+logTransitionStart(transition.name, transition.startTime);
+```
+
+Similarly for `onTransitionComplete`, `onMarkerComplete`, `onMarkerProgress`, `onMarkerIncomplete`.
+
+### 2e. Tooltip properties (DEV only)
+
+For DEV builds, use `performance.measure()` with the `detail.devtools` convention (same as component renders) to attach rich tooltip data:
+
+- **Transition entries**: Show transition name, duration, number of markers
+- **Marker entries**: Show marker name, transition name, pending boundaries at completion
+- **Progress entries**: Show list of pending Suspense boundary names
 
 ---
 
-## Phase 3: Profiler Linking (Medium-High effort, 3-5 days)
+## Phase 3: Profiling Hooks Bridge (Low effort, optional)
 
-### 3a. Add transition context to commit data
+### 3a. Emit `performance.mark()` entries
 
-Extend `CommitDataBackend` with `activeTransitions` and `transitionEvents`.
+**File**: `packages/react-devtools-shared/src/backend/profilingHooks.js`
 
-### 3b. Display in Profiler sidebar
+In `createProfilingHooks()`, add `markTransitionStarted`, `markTransitionComplete`, `markMarkerComplete` hooks that emit `performance.mark()` calls. These can be consumed by any tooling that reads User Timing marks (not just Chrome DevTools).
 
-Show which transitions were active during selected commit in `SidebarCommitInfo.js`.
-
-### 3c. Cross-panel navigation
-
-Allow clicking a transition in Timeline to navigate to relevant Profiler commits.
+This is a lightweight bridge -- the primary visualization is the Chrome Performance track from Phase 2.
 
 ---
 
@@ -94,26 +199,20 @@ Allow clicking a transition in Timeline to navigate to relevant Profiler commits
 ### Phase 2
 | File | Action |
 |------|--------|
-| `packages/react-devtools-timeline/src/types.js` | New event types |
-| `packages/react-devtools-shared/src/backend/types.js` | New profiling hooks |
-| `packages/react-devtools-shared/src/backend/profilingHooks.js` | Implement hooks |
-| `packages/react-reconciler/src/ReactFiberTracingMarkerComponent.js` | Call hooks |
-| `packages/react-devtools-timeline/src/content-views/TransitionEventsView.js` | **New file** |
-| `packages/react-devtools-timeline/src/CanvasPage.js` | Wire up view |
-| `packages/react-devtools-timeline/src/EventTooltip.js` | Tooltip rendering |
+| `packages/react-reconciler/src/ReactFiberPerformanceTrack.js` | Add track constants + logging functions |
+| `packages/react-reconciler/src/ReactFiberTracingMarkerComponent.js` | Call logging functions from callback dispatch |
 
-### Phase 3
+### Phase 3 (optional)
 | File | Action |
 |------|--------|
-| `packages/react-devtools-shared/src/backend/types.js` | Extend `CommitDataBackend` |
-| `packages/react-devtools-shared/src/backend/fiber/renderer.js` | Collect transition data |
-| `packages/react-devtools-shared/src/devtools/views/Profiler/SidebarCommitInfo.js` | Display transitions |
+| `packages/react-devtools-shared/src/backend/profilingHooks.js` | Add performance.mark() hooks |
 
 ---
 
 ## Risks
 
-1. **Feature flag guard**: All changes must be gated on `enableTransitionTracing`
-2. **Performance**: Profiling hooks guarded by `isProfiling` check
-3. **Backwards compatibility**: Handle renderers without transition tracing support
-4. **Timeline panel uncertainty**: Keep data collection separate from visualization
+1. **Feature flag guard**: All Phase 2 changes must be gated on both `enableTransitionTracing` and `enableProfilerTimer` (the latter gates `supportsUserTiming`)
+2. **Performance**: `console.timeStamp()` calls are cheap but should still be behind the `supportsUserTiming` guard
+3. **Track proliferation**: Many concurrent named transitions could create many sub-tracks in Chrome. Consider collapsing unnamed transitions or limiting track count
+4. **Timestamp accuracy**: Depends on Plan 01 (Timestamp Accuracy) for correct start/end times. Current `performance.now()` timestamps are functional but may miss event dispatch overhead
+5. **`onTransitionIncomplete` dependency**: Phase 2 logging for incomplete transitions depends on Plan 02 (implementing the incomplete callback). Can be added incrementally

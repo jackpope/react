@@ -4,6 +4,19 @@
 
 Transition tracing has 22 tests in a single file (`ReactTransitionTracing-test.js`, 2572 lines) using only `react-noop-renderer`. There are significant gaps: no `onTransitionIncomplete` tests, no error boundary tests, no `useTransition` hook tests, no DOM-specific tests, no SSR/hydration tests, and 1 skipped test.
 
+## Approach
+
+**Build out extensive feature coverage first, even for unimplemented features.** The goal is to define the full expected behavior of transition tracing through tests. Tests for features that are not yet implemented (e.g., `onTransitionIncomplete`, error abort reasons) should be skipped (`it.skip` or `xit`) so the suite stays green. As each feature is implemented (Plans 02, 09, etc.), the corresponding tests get unskipped and must pass.
+
+For features that ARE already implemented, tests should be made to pass. This creates a living specification: the test suite documents both what works today and what the complete feature set should look like.
+
+**Priority coverage:**
+- All testing gaps identified in `test-coverage-and-known-issues.md` (error boundaries, `useTransition`, interruption, DOM renderer, SSR/hydration)
+- P0 scenarios: `onTransitionIncomplete` (Plan 02), DevTools smoke tests
+- P1 scenarios: mutable pending array (Plan 08), abort metadata (Plan 09), marker name change (Plan 13), pre-rendering exclusion (Plan 15)
+
+Tests for P0/P1 features that depend on unimplemented code should be written with expected behavior and skipped.
+
 ---
 
 ## Current Test File Analysis
@@ -60,7 +73,7 @@ Separate files follow the codebase pattern of focused test files per concern (e.
 
 ### Category B: Error Boundary Interaction (Critical -- 0 existing tests)
 
-**File**: `ReactTransitionTracingErrorBoundary-test.js`
+**File**: `ReactTransitionTracingErrorBoundary-test.js` (noop renderer)
 
 ```js
 class ErrorBoundary extends React.Component {
@@ -81,7 +94,7 @@ class ErrorBoundary extends React.Component {
 
 ### Category C: `useTransition` Hook (High -- 0 existing tests)
 
-**File**: `ReactTransitionTracingHook-test.js`
+**File**: `ReactTransitionTracingHook-test.js` (noop renderer)
 
 **Key difference**: Internal `startTransition` in `ReactFiberHooks.js` sets `currentTransition.startTime = now()` (not `-1` like standalone).
 
@@ -94,7 +107,7 @@ class ErrorBoundary extends React.Component {
 
 ### Category D: Transition Interruption (High -- 0 existing tests)
 
-**File**: `ReactTransitionTracingInterruption-test.js`
+**File**: `ReactTransitionTracingInterruption-test.js` (noop renderer)
 
 1. **Discrete event interrupts transition**: High-priority update during pending transition. Callbacks fire correctly after restart.
 2. **Second transition interrupts first**: Start A (suspends), start B (suspends). Resolve independently. Both get correct callbacks.
@@ -102,17 +115,18 @@ class ErrorBoundary extends React.Component {
 4. **Root unmount during transition**: No stale callbacks, no errors.
 5. **Shared Suspense boundaries across interrupted transitions**: One interrupted, other still tracks boundary.
 
-### Category E: DOM-Specific Tests (Medium)
+### Category E: DOM-Specific Tests (Medium -- narrowly scoped)
 
 **File**: `packages/react-dom/src/__tests__/ReactTransitionTracing-dom-test.js`
 
 Setup: JSDOM environment, `ReactDOMClient.createRoot(container, { unstable_transitionCallbacks })`.
 
-1. **Basic transition with DOM renderer**: Same scenario as noop test 2, verify callbacks in DOM.
-2. **Suspense boundary tracking in DOM**: Transition reveals Suspense, verify progress/complete callbacks.
-3. **TracingMarker with DOM renderer**: Marker callbacks fire correctly.
-4. **Multiple DOM roots**: Independent tracking per root.
-5. **Timestamp behavior**: Verify timestamps are reasonable positive numbers.
+Most transition tracing behavior is renderer-agnostic and tested via the noop renderer (Categories A-D). DOM tests should only cover integrations that are specific to the DOM renderer:
+
+1. **Timestamp behavior**: Verify timestamps are reasonable positive numbers (DOM uses real `performance.now()` vs noop's virtual clock).
+2. **`createRoot` callback options**: Verify `unstable_transitionCallbacks` option works with `ReactDOMClient.createRoot`.
+3. **Multiple DOM roots**: Independent tracking per root (DOM-specific root lifecycle).
+4. **Basic smoke test**: One end-to-end transition with Suspense to confirm DOM renderer wiring works.
 
 ### Category F: SSR/Hydration Tests (Medium)
 
@@ -175,24 +189,31 @@ it('test with cache API', () => { ... })
 
 ## Implementation Sequence
 
-### Phase 1: Foundation
-1. Fix or address skipped test 12 (existing file)
-2. Add `onTransitionIncomplete` tests (Category A) -- requires Plan 02
-3. Add `useTransition` hook tests (Category C)
+### Phase 1: Foundation (implemented features -- tests must pass)
+1. Add `useTransition` hook tests (Category C) -- feature exists, tests should pass
+2. Create interruption test file (Category D) -- interruption paths exist, tests should pass
 
-### Phase 2: Error + Interruption Coverage
-4. Create error boundary test file (Category B)
-5. Create interruption test file (Category D)
+### Phase 2: Unimplemented features (tests written but skipped)
+4. Add `onTransitionIncomplete` tests (Category A) -- skip until Plan 02 is implemented
+5. Create error boundary test file (Category B) -- skip tests that depend on `'error'` abort reason (Plan 09)
+6. Add P1 scenario tests:
+   - Mutable pending array exposure (Plan 08) -- skip, write test showing user mutation problem
+   - Abort metadata fields (Plan 09) -- skip, write tests expecting `endTime`, `newName`, `error`, `componentStack`
+   - Marker name change (Plan 13) -- unskip existing test 12 attempt, add new cases, skip if still failing
+   - Pre-rendering exclusion (Plan 15) -- skip, write tests expecting OffscreenLane exclusion
 
-### Phase 3: Cross-Renderer Coverage
-6. Create DOM test file (Category E)
-7. Create SSR/hydration test file (Category F)
+### Phase 3: DOM-Specific Coverage (only for DOM-specific integrations)
+7. Create DOM test file (Category E) -- only for behavior that differs from noop renderer (timestamps, real DOM output, `createRoot` options)
+8. Create SSR/hydration test file (Category F) -- skip tests that depend on Fizz TracingMarker support (Plan 04); smoke tests for "doesn't crash" should pass
+9. Fix or address skipped test 12 in existing file
 
 ---
 
 ## Key Implementation Notes
 
-1. **`onTransitionIncomplete` is dead code**: `processTransitionCallbacks` has no code to invoke it. Category A tests serve as a forcing function for Plan 02.
-2. **`TransitionAbort` reason gap**: Switch statement handles `'marker'` and `'suspense'` but silently drops `'error'` and `'unknown'`. Error boundary tests (Category B) expose this.
-3. **`useTransition` timestamp difference**: Standalone sets `startTime = -1`, `useTransition`'s internal `startTransition` sets `startTime = now()`. Tests should document this.
-4. **Noop vs DOM differences**: Different time simulation (`ReactNoop.expire` vs `jest.advanceTimersByTime`), different root creation, different output assertion patterns.
+1. **Skip convention**: Use `it.skip` for tests that depend on unimplemented features. Add a comment referencing the plan that must be completed first (e.g., `// skip: requires Plan 02 (onTransitionIncomplete)`). When a plan is implemented, unskip the relevant tests and ensure they pass.
+2. **`onTransitionIncomplete` is dead code**: `processTransitionCallbacks` has no code to invoke it. Category A tests serve as a forcing function for Plan 02.
+3. **`TransitionAbort` reason gap**: Switch statement handles `'marker'` and `'suspense'` but silently drops `'error'` and `'unknown'`. Error boundary tests (Category B) expose this.
+4. **`useTransition` timestamp difference**: Standalone sets `startTime = -1`, `useTransition`'s internal `startTransition` sets `startTime = now()`. Tests should document this.
+5. **Noop vs DOM differences**: Different time simulation (`ReactNoop.expire` vs `jest.advanceTimersByTime`), different root creation, different output assertion patterns.
+6. **P1 scenario tests as specification**: Even though P1 features aren't implemented, the skipped tests document the expected behavior. This makes implementation plans concrete and testable from day one.

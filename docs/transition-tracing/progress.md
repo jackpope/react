@@ -23,7 +23,7 @@ The feature exists in the codebase behind a feature flag (off in all production 
 ### P0 -- Project health and testing
 - [ ] **17 - Test Coverage Expansion**: Add tests for `onTransitionIncomplete`, error boundaries, `useTransition` hook, interruption, DOM renderer, and SSR/hydration. Currently 22 tests in one file with noop renderer only.
 - [ ] **18 - Fixture App**: Create `fixtures/transition-tracing/` with interactive scenarios, callback dashboard, and configurable delays for manual testing.
-- [ ] **10 - DevTools Integration**: Phase 1: show `name` prop in component tree. Phase 2: timeline visualization. Phase 3: profiler linking. High effort.
+- [ ] **10 - DevTools Integration**: Phase 1: show `name` prop in component tree + inspector state. Phase 2: Chrome custom performance track via `console.timeStamp()` (following existing scheduler/component track patterns). Phase 3 (optional): `performance.mark()` hooks bridge. Medium effort.
 
 
 ### P1 -- Core correctness
