@@ -30,13 +30,12 @@ The feature exists in the codebase behind a feature flag (off in all production 
 
 - [x] **19 - Interruption Handling**: Fix cross-attribution when a transition is interrupted by a newer transition reusing the same Suspense boundary. Four-part fix: (1) detect interruption via wakeable identity tracking on OffscreenInstance in throwException, (2) clean up old transition associations and update TracingMarker instances in commitOffscreenPassiveMountEffects, (3) handle hidden→hidden in commitTransitionProgress, (4) filter pushRootMarkerInstance to current render's transitions. Also: set Passive on HostRoot when incompleteTransitions.size > 0.
 - [x] **02 - onTransitionIncomplete**: Implement the 7th callback accumulator. The callback type exists but is dead code -- never dispatched in `processTransitionCallbacks`.
-- [ ] **08 - Mutable Pending Array**: Clone `SuspenseInfo` objects in `onMarkerProgress` and `onTransitionProgress` callbacks so users can't mutate React internals. Trivial fix (~6 lines).
+- [x] **08 - Mutable Pending Array**: Clone `SuspenseInfo` objects in `onMarkerProgress` and `onTransitionProgress` callbacks so users can't mutate React internals. Trivial fix (~6 lines).
 - [x] **09 - Abort Metadata**: Expand `TransitionAbort` type with `endTime`, `newName`, `error`, `componentStack`. Wire up `'error'` and `'unknown'` abort reasons (currently dead). Error boundary integration (Phase 3) deferred.
 - [ ] **15 - Pre-rendering Exclusion**: Exclude pre-rendered (OffscreenLane) trees from transition metrics. Deferred until `<Activity>` semantics stabilize.
 
 ### P2 -- Important for adoption
 
-- [ ] **12 - Batched Disambiguation**: Add `batchedWith` info to `onTransitionStart` callback — when transitions are batched in the same tick, each receives the names of other transitions in the batch. Helps consumers disambiguate same-tick batched transitions. (Reverted from P1; depends on Plan 19 for interruption correctness.)
 - [ ] **04 - Hydration Tracing**: Add hydration lifecycle tracking. Prerequisite: fix TracingMarker in Fizz server renderer (currently would crash). Large effort.
 - [ ] **01 - Timestamp Accuracy**: Enhance start time to use `window.event.timeStamp` (captures user interaction time, not JS processing time). Implement `requestPostPaintCallback` for DOM end time. The current lazy `performance.now()` init is functionally correct but misses event dispatch overhead.
 - [ ] **14 - CPU Suspense**: Copy IO Suspense tracing block to CPU Suspense path in `updateSuspenseComponent`. ~15 lines, low risk. Depends on `enableCPUSuspense`.
@@ -44,6 +43,7 @@ The feature exists in the codebase behind a feature flag (off in all production 
 ### P3 -- Nice to have / Defer
 
 - [ ] **16 - Redundant clearTransitionsForLanes**: Remove first of two identical `clearTransitionsForLanes` calls in HostRoot passive mount. 1 line removed, trivial.
+- [ ] **12 - Batched Disambiguation**: Add `batchedWith` info to `onTransitionStart` callback — when transitions are batched in the same tick, each receives the names of other transitions in the batch. Helps consumers disambiguate same-tick batched transitions. (Reverted from P1; depends on Plan 19 for interruption correctness.)
 
 ### Consider later
 - [ ] **07 - Transition Metadata/Tags**: Add `metadata: mixed` field to `startTransition` options, pass through to all callbacks. Low effort, high value for analytics.

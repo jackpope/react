@@ -99,14 +99,15 @@ export function processTransitionCallbacks(
       if (markerProgress !== null) {
         markerProgress.forEach((markerInstance, markerName) => {
           if (markerInstance.transitions !== null) {
-            // TODO: Clone the suspense object so users can't modify it
-            const pending =
-              markerInstance.pendingBoundaries !== null
-                ? Array.from(markerInstance.pendingBoundaries.values())
-                : [];
             markerInstance.transitions.forEach(transition => {
               const name = transition.name;
               if (name != null) {
+                const pending: Array<{name: null | string}> = [];
+                if (markerInstance.pendingBoundaries !== null) {
+                  markerInstance.pendingBoundaries.forEach(boundary => {
+                    pending.push({name: boundary.name});
+                  });
+                }
                 if (onMarkerProgress != null) {
                   onMarkerProgress(
                     name,
@@ -241,13 +242,17 @@ export function processTransitionCallbacks(
       const transitionProgress = pendingTransitions.transitionProgress;
       const onTransitionProgress = callbacks.onTransitionProgress;
       if (onTransitionProgress != null && transitionProgress !== null) {
-        transitionProgress.forEach((pending, transition) => {
+        transitionProgress.forEach((pendingBoundaries, transition) => {
           if (transition.name != null) {
+            const pending: Array<{name: null | string}> = [];
+            pendingBoundaries.forEach(boundary => {
+              pending.push({name: boundary.name});
+            });
             onTransitionProgress(
               transition.name,
               transition.startTime,
               endTime,
-              Array.from(pending.values()),
+              pending,
             );
           }
         });
