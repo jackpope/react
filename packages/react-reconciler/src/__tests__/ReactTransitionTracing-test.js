@@ -3130,4 +3130,142 @@ describe('ReactInteractionTracing', () => {
       ]);
     });
   });
+
+  // @gate enableTransitionTracing
+  it('interrupted transition should be incomplete when Suspense boundary is reused by a newer transition', async () => {
+    // Scenario matching the fixture: Navigate to profile 1 (suspends), then
+    // navigate to profile 2 before profile 1 loads. The Suspense boundary and
+    // TracingMarker fibers are reused (same tree position, hidden→hidden).
+    //
+    // Expected: transition 1 fires onTransitionIncomplete, transition 2 tracks
+    // its own Suspense boundary and fires onTransitionComplete when resolved.
+    //
+    // Bug: Without the fix, transition 2 completes immediately (its root marker
+    // never gets pending boundaries because the hidden→hidden queue is dropped),
+    // and transition 1 incorrectly completes when profile 2's content resolves.
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onMarkerComplete: (transitionName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitionName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setProfile;
+    function App() {
+      const [profileId, _setProfile] = useState(null);
+      setProfile = _setProfile;
+
+      if (profileId === null) {
+        return <Text text="Home" />;
+      }
+
+      // Mirrors the fixture: TracingMarker wraps Suspense, both at the same
+      // tree position for any profileId, so fibers are reused across transitions.
+      return (
+        <React.unstable_TracingMarker name="profile">
+          <Suspense
+            name="profile-suspense"
+            fallback={<Text text={`Loading Profile ${profileId}...`} />}>
+            <AsyncText text={`Profile ${profileId}`} />
+          </Suspense>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Home']);
+    });
+
+    // Step 1: Navigate to profile 1 (suspends, Suspense goes visible→hidden)
+    await act(async () => {
+      startTransition(() => setProfile(1), {name: 'navigate-to-profile(1)'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [Profile 1]',
+        'Loading Profile 1...',
+        // pre-warming
+        'Suspend [Profile 1]',
+        // end pre-warming
+        'onTransitionStart(navigate-to-profile(1), 1000)',
+        'onTransitionProgress(navigate-to-profile(1), 1000, 2000, [profile-suspense])',
+      ]);
+    });
+
+    // Step 2: Navigate to profile 2 before profile 1 loads.
+    // The Suspense boundary stays hidden (hidden→hidden) with new content.
+    await act(async () => {
+      startTransition(() => setProfile(2), {name: 'navigate-to-profile(2)'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [Profile 2]',
+        'Loading Profile 2...',
+        // pre-warming
+        'Suspend [Profile 2]',
+        // end pre-warming
+        'onTransitionStart(navigate-to-profile(2), 2000)',
+        // Transition 1 should be incomplete — it was interrupted
+        'onTransitionIncomplete(navigate-to-profile(1), 1000, [{endTime: 3000, name: profile-suspense, type: suspense}])',
+        // Transition 2 should track the Suspense boundary (not complete yet)
+        'onTransitionProgress(navigate-to-profile(2), 2000, 3000, [profile-suspense])',
+      ]);
+    });
+
+    // Step 3: Resolve profile 2 — only transition 2 should complete
+    await act(async () => {
+      await resolveText('Profile 2');
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Profile 2',
+        'onTransitionProgress(navigate-to-profile(2), 2000, 4000, [])',
+        'onMarkerComplete(navigate-to-profile(2), profile, 2000, 4000)',
+        'onTransitionComplete(navigate-to-profile(2), 2000, 4000)',
+      ]);
+    });
+  });
 });

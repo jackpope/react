@@ -28,15 +28,16 @@ The feature exists in the codebase behind a feature flag (off in all production 
 
 ### P1 -- Core correctness
 
+- [ ] **19 - Interruption Handling**: Fix cross-attribution when a transition is interrupted by a newer transition reusing the same Suspense boundary. Three-part fix: set Passive flag for hidden->hidden, clean up old transition associations in commit, filter `pushRootMarkerInstance` to current render's transitions. Failing test added.
 - [x] **02 - onTransitionIncomplete**: Implement the 7th callback accumulator. The callback type exists but is dead code -- never dispatched in `processTransitionCallbacks`.
 - [ ] **08 - Mutable Pending Array**: Clone `SuspenseInfo` objects in `onMarkerProgress` and `onTransitionProgress` callbacks so users can't mutate React internals. Trivial fix (~6 lines).
 - [x] **09 - Abort Metadata**: Expand `TransitionAbort` type with `endTime`, `newName`, `error`, `componentStack`. Wire up `'error'` and `'unknown'` abort reasons (currently dead). Error boundary integration (Phase 3) deferred.
-- [ ] **12 - Batched Disambiguation**: Better handling of batched/superseded transitions. When a newer transition interrupts an in-progress one, the interrupted transition's markers are incorrectly attributed as complete, and the new transition gets almost no tracked work.
 - [ ] **13 - Marker Name Change Fix**: Handle marker name changes in begin work update path. Add `newName` to `TransitionAbort`. Unskip test 12.
 - [ ] **15 - Pre-rendering Exclusion**: Exclude pre-rendered (OffscreenLane) trees from transition metrics. Deferred until `<Activity>` semantics stabilize.
 
 ### P2 -- Important for adoption
 
+- [ ] **12 - Batched Disambiguation**: Add `batchedWith` info to `onTransitionStart` callback — when transitions are batched in the same tick, each receives the names of other transitions in the batch. Helps consumers disambiguate same-tick batched transitions. (Reverted from P1; depends on Plan 19 for interruption correctness.)
 - [ ] **04 - Hydration Tracing**: Add hydration lifecycle tracking. Prerequisite: fix TracingMarker in Fizz server renderer (currently would crash). Large effort.
 - [ ] **01 - Timestamp Accuracy**: Enhance start time to use `window.event.timeStamp` (captures user interaction time, not JS processing time). Implement `requestPostPaintCallback` for DOM end time. The current lazy `performance.now()` init is functionally correct but misses event dispatch overhead.
 - [ ] **14 - CPU Suspense**: Copy IO Suspense tracing block to CPU Suspense path in `updateSuspenseComponent`. ~15 lines, low risk. Depends on `enableCPUSuspense`.
