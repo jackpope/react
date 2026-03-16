@@ -3007,10 +3007,7 @@ describe('ReactInteractionTracing', () => {
         // end pre-warming
       ]);
 
-      startTransition(
-        () => root.render(<App />),
-        {name: 'transition'},
-      );
+      startTransition(() => root.render(<App />), {name: 'transition'});
       ReactNoop.expire(1000);
       await advanceTimers(1000);
       await waitForAll([
@@ -3073,9 +3070,7 @@ describe('ReactInteractionTracing', () => {
       return (
         <div>
           {show ? (
-            <Suspense
-              name="my-boundary"
-              fallback={<Text text="Loading..." />}>
+            <Suspense name="my-boundary" fallback={<Text text="Loading..." />}>
               <AsyncText text="Content" />
             </Suspense>
           ) : (
@@ -3100,10 +3095,7 @@ describe('ReactInteractionTracing', () => {
         // end pre-warming
       ]);
 
-      startTransition(
-        () => root.render(<App />),
-        {name: 'load'},
-      );
+      startTransition(() => root.render(<App />), {name: 'load'});
       ReactNoop.expire(1000);
       await advanceTimers(1000);
       await waitForAll([
@@ -3247,10 +3239,12 @@ describe('ReactInteractionTracing', () => {
         'Suspend [Profile 2]',
         // end pre-warming
         'onTransitionStart(navigate-to-profile(2), 2000)',
+        // Transition 2 should track the Suspense boundary (not complete yet).
+        // Progress fires during tree traversal (commitTransitionProgress),
+        // while incomplete fires at root level (incompleteTransitions check).
+        'onTransitionProgress(navigate-to-profile(2), 2000, 3000, [profile-suspense])',
         // Transition 1 should be incomplete — it was interrupted
         'onTransitionIncomplete(navigate-to-profile(1), 1000, [{endTime: 3000, name: profile-suspense, type: suspense}])',
-        // Transition 2 should track the Suspense boundary (not complete yet)
-        'onTransitionProgress(navigate-to-profile(2), 2000, 3000, [profile-suspense])',
       ]);
     });
 
@@ -3262,8 +3256,10 @@ describe('ReactInteractionTracing', () => {
 
       await waitForAll([
         'Profile 2',
-        'onTransitionProgress(navigate-to-profile(2), 2000, 4000, [])',
+        // Marker complete fires during tree traversal (commitTransitionProgress)
+        // before root-level transition progress/complete callbacks.
         'onMarkerComplete(navigate-to-profile(2), profile, 2000, 4000)',
+        'onTransitionProgress(navigate-to-profile(2), 2000, 4000, [])',
         'onTransitionComplete(navigate-to-profile(2), 2000, 4000)',
       ]);
     });

@@ -58,4 +58,6 @@ export type OffscreenInstance = {
   _pendingMarkers: Set<TracingMarkerInstance> | null,
   _transitions: Set<Transition> | null,
   _retryCache: WeakSet<Wakeable> | Set<Wakeable> | null,
+  _lastWakeable: Wakeable | null,
+  _interrupted: boolean,
 };

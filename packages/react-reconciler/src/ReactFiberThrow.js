@@ -45,6 +45,7 @@ import {
 import {NoMode, ConcurrentMode} from './ReactTypeOfMode';
 import {
   enableUpdaterTracking,
+  enableTransitionTracing,
   disableLegacyMode,
 } from 'shared/ReactFeatureFlags';
 import {createCapturedValueAtFiber} from './ReactCapturedValue';
@@ -454,6 +455,46 @@ function throwException(
             //
             // When the wakeable resolves, we'll attempt to render the boundary
             // again ("retry").
+
+            if (enableTransitionTracing) {
+              // Detect interruption: when a Suspense boundary that's already
+              // in fallback (hidden) catches a NEW wakeable (different content),
+              // this is a genuine interruption (e.g. navigate to profile 1,
+              // then navigate to profile 2 before profile 1 loads). We track
+              // the last wakeable on the OffscreenInstance to distinguish
+              // interruptions from incidental re-renders of the same content.
+              const currentBoundary = suspenseBoundary.alternate;
+              if (
+                currentBoundary !== null &&
+                currentBoundary.memoizedState !== null
+              ) {
+                // Boundary was already in fallback (hidden→hidden case)
+                const offscreenFiber = currentBoundary.child;
+                if (offscreenFiber !== null) {
+                  const offscreenInstance = offscreenFiber.stateNode;
+                  if (offscreenInstance !== null) {
+                    if (
+                      offscreenInstance._lastWakeable !== null &&
+                      offscreenInstance._lastWakeable !== wakeable &&
+                      offscreenInstance._transitions !== null
+                    ) {
+                      offscreenInstance._interrupted = true;
+                    }
+                    offscreenInstance._lastWakeable = wakeable;
+                  }
+                }
+              } else if (currentBoundary !== null) {
+                // First suspension (visible→hidden): record the wakeable
+                // for future interruption detection
+                const offscreenFiber = currentBoundary.child;
+                if (offscreenFiber !== null) {
+                  const offscreenInstance = offscreenFiber.stateNode;
+                  if (offscreenInstance !== null) {
+                    offscreenInstance._lastWakeable = wakeable;
+                  }
+                }
+              }
+            }
 
             // Check if this is a Suspensey resource. We do not attach retry
             // listeners to these, because we don't actually need them for

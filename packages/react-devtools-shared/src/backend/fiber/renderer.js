@@ -6704,9 +6704,21 @@ export function attach(
       const transitions = instance.transitions;
       const pendingBoundaries = instance.pendingBoundaries;
       tracingMarkerData = {
-        transitions: transitions ? Array.from(transitions).map(t => ({name: t.name, startTime: t.startTime})) : [],
-        pendingBoundaries: pendingBoundaries ? Array.from(pendingBoundaries.values()).map(info => info.name) : [],
-        status: instance.aborts != null ? 'incomplete' : (pendingBoundaries != null && pendingBoundaries.size > 0 ? 'pending' : 'complete'),
+        transitions: transitions
+          ? Array.from(transitions).map(t => ({
+              name: t.name,
+              startTime: t.startTime,
+            }))
+          : [],
+        pendingBoundaries: pendingBoundaries
+          ? Array.from(pendingBoundaries.values()).map(info => info.name)
+          : [],
+        status:
+          instance.aborts != null
+            ? 'incomplete'
+            : pendingBoundaries != null && pendingBoundaries.size > 0
+              ? 'pending'
+              : 'complete',
       };
     }
 

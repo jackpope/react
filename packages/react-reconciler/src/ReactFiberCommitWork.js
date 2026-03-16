@@ -1128,6 +1128,44 @@ function commitTransitionProgress(offscreenFiber: Fiber) {
           }
         });
       }
+    } else if (wasHidden && isHidden) {
+      // Hidden→hidden: the boundary was re-suspended with new content
+      // (interruption). Add the boundary to the new markers' pending
+      // boundaries, mirroring the visible→hidden logic.
+      if (pendingMarkers !== null) {
+        pendingMarkers.forEach(markerInstance => {
+          const pendingBoundaries = markerInstance.pendingBoundaries;
+          const transitions = markerInstance.transitions;
+          const markerName = markerInstance.name;
+          if (
+            pendingBoundaries !== null &&
+            !pendingBoundaries.has(offscreenInstance)
+          ) {
+            pendingBoundaries.set(offscreenInstance, {
+              name,
+            });
+            if (transitions !== null) {
+              if (
+                markerInstance.tag === TransitionTracingMarker &&
+                markerName !== null
+              ) {
+                addMarkerProgressCallbackToPendingTransition(
+                  markerName,
+                  transitions,
+                  pendingBoundaries,
+                );
+              } else if (markerInstance.tag === TransitionRoot) {
+                transitions.forEach(transition => {
+                  addTransitionProgressCallbackToPendingTransition(
+                    transition,
+                    pendingBoundaries,
+                  );
+                });
+              }
+            }
+          }
+        });
+      }
     } else if (wasHidden && !isHidden) {
       // The suspense boundary went from hidden to visible. Remove
       // the boundary from the pending suspense boundaries set
@@ -3401,8 +3439,65 @@ function commitOffscreenPassiveMountEffects(
     const queue: OffscreenQueue | null = (finishedWork.updateQueue: any);
 
     const isHidden = offscreenState !== null;
+    const wasHidden = current !== null && current.memoizedState !== null;
+
     if (queue !== null) {
       if (isHidden) {
+        // Part 2: If this is a hidden→hidden interruption, clean up old
+        // transition associations before adding new ones.
+        if (wasHidden && instance._interrupted) {
+          const oldPendingMarkers = instance._pendingMarkers;
+          if (oldPendingMarkers !== null) {
+            // Get the Suspense boundary name for the abort record
+            let suspenseName = null;
+            const parent = finishedWork.return;
+            if (
+              parent !== null &&
+              parent.tag === SuspenseComponent &&
+              parent.memoizedProps.name
+            ) {
+              suspenseName = parent.memoizedProps.name;
+            }
+            oldPendingMarkers.forEach(markerInstance => {
+              const pendingBoundaries = markerInstance.pendingBoundaries;
+              if (
+                pendingBoundaries !== null &&
+                pendingBoundaries.has(instance)
+              ) {
+                pendingBoundaries.delete(instance);
+              }
+              const abort: TransitionAbort = {
+                reason: 'suspense',
+                name: suspenseName,
+                endTime: now(),
+              };
+              if (markerInstance.aborts === null) {
+                markerInstance.aborts = [abort];
+              } else {
+                markerInstance.aborts.push(abort);
+              }
+            });
+          }
+          instance._transitions = null;
+          instance._pendingMarkers = null;
+          // Update TracingMarker instances to track the interrupting
+          // transition instead of the old one. Without this, the marker
+          // instance's transitions set still references the old
+          // (interrupted) transition, so the association check below
+          // (instance._transitions.has(transition)) would fail.
+          const newTransitions = queue.transitions;
+          const newMarkerInstances = queue.markerInstances;
+          if (newTransitions !== null && newMarkerInstances !== null) {
+            newMarkerInstances.forEach(markerInst => {
+              if (markerInst.tag === TransitionTracingMarker) {
+                markerInst.transitions = new Set(newTransitions);
+                markerInst.pendingBoundaries = null;
+                markerInst.aborts = null;
+              }
+            });
+          }
+        }
+
         const transitions = queue.transitions;
         if (transitions !== null) {
           transitions.forEach(transition => {
@@ -3444,6 +3539,11 @@ function commitOffscreenPassiveMountEffects(
       }
 
       finishedWork.updateQueue = null;
+    }
+
+    // Clear the interrupted flag after processing
+    if (instance._interrupted) {
+      instance._interrupted = false;
     }
 
     commitTransitionProgress(finishedWork);

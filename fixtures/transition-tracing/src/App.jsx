@@ -14,7 +14,10 @@ export default function App({eventEmitter}) {
   function navigate(target, id) {
     eventEmitter.emit({
       type: 'user-click',
-      label: id !== undefined ? `navigate-to-${target}(${id})` : `navigate-to-${target}`,
+      label:
+        id !== undefined
+          ? `navigate-to-${target}(${id})`
+          : `navigate-to-${target}`,
       timestamp: performance.now(),
     });
     clearCache();
@@ -25,7 +28,12 @@ export default function App({eventEmitter}) {
           setProfileId(id);
         }
       },
-      {name: id !== undefined ? `navigate-to-${target}(${id})` : `navigate-to-${target}`},
+      {
+        name:
+          id !== undefined
+            ? `navigate-to-${target}(${id})`
+            : `navigate-to-${target}`,
+      }
     );
   }
 
@@ -46,7 +54,11 @@ export default function App({eventEmitter}) {
   return (
     <div className={styles.app}>
       <div className={styles.main}>
-        <NavBar onNavigate={navigate} currentPage={page} profileId={profileId} />
+        <NavBar
+          onNavigate={navigate}
+          currentPage={page}
+          profileId={profileId}
+        />
         <div className={styles.content}>{content}</div>
       </div>
       <TracingDashboard eventEmitter={eventEmitter} />

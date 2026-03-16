@@ -116,12 +116,7 @@ export function processTransitionCallbacks(
                     pending,
                   );
                 }
-                logMarkerTracingProgress(
-                  name,
-                  markerName,
-                  endTime,
-                  pending,
-                );
+                logMarkerTracingProgress(name, markerName, endTime, pending);
               }
             });
           }
@@ -159,16 +154,26 @@ export function processTransitionCallbacks(
       if (markerIncomplete !== null) {
         markerIncomplete.forEach(({transitions, aborts}, markerName) => {
           transitions.forEach(transition => {
-            const filteredAborts = [];
+            const filteredAborts: Array<{
+              type: string,
+              name?: string | null,
+              newName?: string | null,
+              endTime: number,
+              error?: mixed,
+              componentStack?: string | null,
+            }> = [];
             aborts.forEach(abort => {
-              const abortEndTime = abort.endTime != null ? abort.endTime : endTime;
+              const abortEndTime =
+                abort.endTime != null ? abort.endTime : endTime;
               switch (abort.reason) {
                 case 'marker': {
                   const deletion: {
                     type: string,
-                    name: string | void | null,
-                    endTime: number,
+                    name?: string | null,
                     newName?: string | null,
+                    endTime: number,
+                    error?: mixed,
+                    componentStack?: string | null,
                   } = {
                     type: 'marker',
                     name: abort.name,
@@ -255,17 +260,9 @@ export function processTransitionCallbacks(
           const name = transition.name;
           if (name != null) {
             if (onTransitionComplete != null) {
-              onTransitionComplete(
-                name,
-                transition.startTime,
-                endTime,
-              );
+              onTransitionComplete(name, transition.startTime, endTime);
             }
-            logTransitionTracingComplete(
-              name,
-              transition.startTime,
-              endTime,
-            );
+            logTransitionTracingComplete(name, transition.startTime, endTime);
           }
         });
       }
@@ -276,16 +273,26 @@ export function processTransitionCallbacks(
         transitionIncomplete.forEach(({aborts}, transition) => {
           const name = transition.name;
           if (name != null) {
-            const filteredAborts = [];
+            const filteredAborts: Array<{
+              type: string,
+              name?: string | null,
+              newName?: string | null,
+              endTime: number,
+              error?: mixed,
+              componentStack?: string | null,
+            }> = [];
             aborts.forEach(abort => {
-              const abortEndTime = abort.endTime != null ? abort.endTime : endTime;
+              const abortEndTime =
+                abort.endTime != null ? abort.endTime : endTime;
               switch (abort.reason) {
                 case 'marker': {
                   const deletion: {
                     type: string,
-                    name: string | void | null,
-                    endTime: number,
+                    name?: string | null,
                     newName?: string | null,
+                    endTime: number,
+                    error?: mixed,
+                    componentStack?: string | null,
                   } = {
                     type: 'marker',
                     name: abort.name,
@@ -336,11 +343,7 @@ export function processTransitionCallbacks(
                 filteredAborts,
               );
             }
-            logTransitionTracingIncomplete(
-              name,
-              transition.startTime,
-              endTime,
-            );
+            logTransitionTracingIncomplete(name, transition.startTime, endTime);
           }
         });
       }
@@ -385,12 +388,23 @@ export function pushRootMarkerInstance(workInProgress: Fiber): void {
     }
 
     const markerInstances = [];
-    // For ever transition on the suspense boundary, we push the transition
-    // along with its map of pending suspense boundaries onto the marker
-    // instance stack.
-    root.incompleteTransitions.forEach(markerInstance => {
-      markerInstances.push(markerInstance);
-    });
+    // Push marker instances onto the stack. When rendering with specific
+    // transitions, only push markers for those transitions to avoid
+    // cross-attribution. When rendering without transitions (e.g., a
+    // setState that deletes a Suspense boundary), push all incomplete
+    // markers so deletion handlers can find them on the stack.
+    if (transitions !== null) {
+      transitions.forEach(transition => {
+        const markerInstance = root.incompleteTransitions.get(transition);
+        if (markerInstance != null) {
+          markerInstances.push(markerInstance);
+        }
+      });
+    } else {
+      root.incompleteTransitions.forEach(markerInstance => {
+        markerInstances.push(markerInstance);
+      });
+    }
     push(markerInstanceStack, markerInstances, workInProgress);
   }
 }

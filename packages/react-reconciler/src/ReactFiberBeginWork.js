@@ -628,6 +628,8 @@ function updateOffscreenComponent(
       _pendingMarkers: null,
       _retryCache: null,
       _transitions: null,
+      _lastWakeable: null,
+      _interrupted: false,
     };
     workInProgress.stateNode = primaryChildInstance;
   }
@@ -816,6 +818,8 @@ function bailoutOffscreenComponent(
       _pendingMarkers: null,
       _retryCache: null,
       _transitions: null,
+      _lastWakeable: null,
+      _interrupted: false,
     };
     workInProgress.stateNode = primaryChildInstance;
   }

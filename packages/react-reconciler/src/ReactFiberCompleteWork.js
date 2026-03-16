@@ -28,6 +28,7 @@ import type {
 import type {
   OffscreenState,
   OffscreenQueue,
+  OffscreenInstance,
 } from './ReactFiberOffscreenComponent';
 import type {TracingMarkerInstance} from './ReactFiberTracingMarkerComponent';
 import type {Cache} from './ReactFiberCacheComponent';
@@ -1180,6 +1181,12 @@ function completeWork(
           // do in the passive phase.
           workInProgress.flags |= Passive;
         }
+        if (fiberRoot.incompleteTransitions.size > 0) {
+          // There are incomplete transitions that may need to fire
+          // onTransitionComplete or onTransitionIncomplete callbacks.
+          // Schedule a passive effect to check them.
+          workInProgress.flags |= Passive;
+        }
       }
       return null;
     }
@@ -1613,6 +1620,17 @@ function completeWork(
         if (enableTransitionTracing) {
           const offscreenFiber: Fiber = (workInProgress.child: any);
           offscreenFiber.flags |= Passive;
+        }
+      } else if (nextDidTimeout && prevDidTimeout) {
+        // Hidden→hidden: only schedule passive effects if this is a
+        // genuine interruption (content changed, detected via wakeable
+        // comparison in throwException).
+        if (enableTransitionTracing) {
+          const offscreenFiber: Fiber = (workInProgress.child: any);
+          const offscreenInstance: OffscreenInstance = offscreenFiber.stateNode;
+          if (offscreenInstance._interrupted) {
+            offscreenFiber.flags |= Passive;
+          }
         }
 
         // If the suspended state of the boundary changes, we need to schedule
