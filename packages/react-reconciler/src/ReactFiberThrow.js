@@ -493,6 +493,17 @@ function throwException(
                     offscreenInstance._lastWakeable = wakeable;
                   }
                 }
+              } else {
+                // New Suspense boundary (no alternate yet): record the
+                // wakeable so the next suspension can detect interruption.
+                // Access via workInProgress child since there's no current.
+                const offscreenFiber = suspenseBoundary.child;
+                if (offscreenFiber !== null) {
+                  const offscreenInstance = offscreenFiber.stateNode;
+                  if (offscreenInstance !== null) {
+                    offscreenInstance._lastWakeable = wakeable;
+                  }
+                }
               }
             }
 

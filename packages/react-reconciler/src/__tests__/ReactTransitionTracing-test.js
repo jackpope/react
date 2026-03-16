@@ -3264,4 +3264,167 @@ describe('ReactInteractionTracing', () => {
       ]);
     });
   });
+
+  // @gate enableTransitionTracing
+  it('interrupted transition with nested Suspense boundaries where outer boundary catches throw', async () => {
+    // This test matches the fixture scenario: a nested tree where the
+    // outer Suspense catches the initial throw (ProfileHeader), so
+    // inner Suspense boundaries never render while the outer is in
+    // fallback. The Suspense boundary is created NEW (Home → Profile),
+    // so currentBoundary is null on first render. Without the fix to
+    // preserve _lastWakeable across mountSuspenseFallbackChildren,
+    // the interruption is not detected because _lastWakeable is lost
+    // when the Offscreen fiber is recreated.
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        Scheduler.log(
+          `onTransitionIncomplete(${name}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onMarkerComplete: (transitionName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitionName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerIncomplete: (
+        transitionName,
+        markerName,
+        startTime,
+        deletions,
+      ) => {
+        Scheduler.log(
+          `onMarkerIncomplete(${transitionName}, ${markerName}, ${startTime}, [${stringifyDeletions(
+            deletions,
+          )}])`,
+        );
+      },
+    };
+
+    let setProfile;
+    function App() {
+      const [profileId, _setProfile] = useState(null);
+      setProfile = _setProfile;
+
+      if (profileId === null) {
+        return <Text text="Home" />;
+      }
+
+      // Nested structure matching the fixture: outer Suspense catches
+      // the ProfileHeader throw, so inner boundaries never render
+      // while the outer is in fallback.
+      return (
+        <React.unstable_TracingMarker name="profile">
+          <Suspense
+            name="profile-header"
+            fallback={<Text text={`Loading Profile ${profileId}...`} />}>
+            <AsyncText text={`ProfileHeader ${profileId}`} />
+            <React.unstable_TracingMarker name="profile:feed">
+              <Suspense
+                name="profile-feed"
+                fallback={<Text text={`Loading Feed ${profileId}...`} />}>
+                <AsyncText text={`Feed ${profileId}`} />
+              </Suspense>
+            </React.unstable_TracingMarker>
+          </Suspense>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Home']);
+    });
+
+    // Step 1: Navigate to profile 1 (outer Suspense catches throw)
+    await act(async () => {
+      startTransition(() => setProfile(1), {name: 'navigate-to-profile(1)'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [ProfileHeader 1]',
+        'Loading Profile 1...',
+        // pre-warming: outer content re-attempted, inner children also render
+        'Suspend [ProfileHeader 1]',
+        'Suspend [Feed 1]',
+        'Loading Feed 1...',
+        'onTransitionStart(navigate-to-profile(1), 1000)',
+        'onTransitionProgress(navigate-to-profile(1), 1000, 2000, [profile-header])',
+      ]);
+    });
+
+    // Step 2: Navigate to profile 2 before profile 1 loads.
+    // The outer Suspense stays hidden (hidden→hidden) with new content.
+    await act(async () => {
+      startTransition(() => setProfile(2), {name: 'navigate-to-profile(2)'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Suspend [ProfileHeader 2]',
+        'Loading Profile 2...',
+        // pre-warming: outer content re-attempted, inner children also render
+        'Suspend [ProfileHeader 2]',
+        'Suspend [Feed 2]',
+        'Loading Feed 2...',
+        'onTransitionStart(navigate-to-profile(2), 2000)',
+        'onTransitionProgress(navigate-to-profile(2), 2000, 3000, [profile-header])',
+        // Transition 1 should be incomplete — it was interrupted
+        'onTransitionIncomplete(navigate-to-profile(1), 1000, [{endTime: 3000, name: profile-header, type: suspense}])',
+      ]);
+    });
+
+    // Step 3: Resolve profile 2 header — inner Suspense now suspends
+    await act(async () => {
+      await resolveText('ProfileHeader 2');
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'ProfileHeader 2',
+        'Suspend [Feed 2]',
+        'Loading Feed 2...',
+        // pre-warming
+        'Suspend [Feed 2]',
+        // Inner Suspense boundary is now pending
+        'onTransitionProgress(navigate-to-profile(2), 2000, 4000, [profile-feed])',
+      ]);
+    });
+
+    // Step 4: Resolve feed 2 — transition 2 should complete
+    await act(async () => {
+      await resolveText('Feed 2');
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        'Feed 2',
+        'onMarkerComplete(navigate-to-profile(2), profile, 2000, 5000)',
+        'onMarkerComplete(navigate-to-profile(2), profile:feed, 2000, 5000)',
+        'onTransitionProgress(navigate-to-profile(2), 2000, 5000, [])',
+        'onTransitionComplete(navigate-to-profile(2), 2000, 5000)',
+      ]);
+    });
+  });
 });

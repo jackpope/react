@@ -2685,6 +2685,19 @@ function mountSuspenseFallbackChildren(
       mode,
       NoLanes,
     );
+    // Transfer the OffscreenInstance from the discarded primary attempt.
+    // The stateNode was created in beginWork during the primary render and
+    // may have _lastWakeable set by throwException for interruption
+    // detection. Without this, the wakeable is lost when a new Suspense
+    // boundary first mounts and immediately shows fallback.
+    if (
+      enableTransitionTracing &&
+      progressedPrimaryFragment !== null &&
+      progressedPrimaryFragment.stateNode !== null
+    ) {
+      primaryChildFragment.stateNode =
+        progressedPrimaryFragment.stateNode;
+    }
     fallbackChildFragment = createFiberFromFragment(
       fallbackChildren,
       mode,
