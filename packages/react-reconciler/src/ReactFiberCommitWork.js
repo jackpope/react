@@ -1168,10 +1168,11 @@ function commitTransitionProgress(offscreenFiber: Fiber) {
           }
         });
       }
-    } else if (wasHidden && !isHidden) {
-      // The suspense boundary went from hidden to visible. Remove
-      // the boundary from the pending suspense boundaries set
-      // if it's there
+    } else if (!isHidden) {
+      // The boundary became visible (either hidden→visible or
+      // visible→visible after a re-suspension that didn't commit).
+      // Remove the boundary from the pending suspense boundaries set
+      // if it's there.
       if (pendingMarkers !== null) {
         pendingMarkers.forEach(markerInstance => {
           const pendingBoundaries = markerInstance.pendingBoundaries;

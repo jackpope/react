@@ -3585,4 +3585,134 @@ describe('ReactInteractionTracing', () => {
       'onTransitionComplete(reveal, 2000, 3000)',
     ]);
   });
+
+  // @gate enableTransitionTracing
+  it('tracks re-suspension of already-resolved Suspense boundary during tab switch', async () => {
+    // When a transition changes content inside an already-resolved Suspense
+    // boundary, the new content suspends but React keeps showing old content
+    // (no fallback). Transition tracing should still track this suspension
+    // as a pending boundary so the transition duration includes the loading time.
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerProgress: (
+        transitioName,
+        markerName,
+        startTime,
+        endTime,
+        pending,
+      ) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onMarkerProgress(${transitioName}, ${markerName}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onMarkerComplete: (transitioName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitioName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+    };
+
+    let setTab;
+    function TabContent({tab}) {
+      const text = readText(`Tab ${tab}`);
+      Scheduler.log(text);
+      return text;
+    }
+
+    function App() {
+      const [tab, _setTab] = useState(1);
+      setTab = _setTab;
+      return (
+        <React.unstable_TracingMarker name="tabs">
+          <Suspense
+            name="tab-content"
+            fallback={<Text text="Loading tab..." />}>
+            <TabContent tab={tab} />
+          </Suspense>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+
+    // Step 1: Initial render — tab 1 loads via transition
+    await act(() => {
+      startTransition(() => root.render(<App />), {name: 'initial'});
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Suspend [Tab 1]',
+      'Loading tab...',
+      // pre-warming
+      'Suspend [Tab 1]',
+      'onTransitionStart(initial, 0)',
+      'onMarkerProgress(initial, tabs, 0, 1000, [tab-content])',
+      'onTransitionProgress(initial, 0, 1000, [tab-content])',
+    ]);
+
+    // Step 2: Resolve tab 1 content — transition completes
+    await act(() => {
+      resolveText('Tab 1');
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Tab 1',
+      'onMarkerProgress(initial, tabs, 0, 2000, [])',
+      'onMarkerComplete(initial, tabs, 0, 2000)',
+      'onTransitionProgress(initial, 0, 2000, [])',
+      'onTransitionComplete(initial, 0, 2000)',
+    ]);
+
+    // Step 3: Switch to tab 2 via a new transition. Tab 1 content is
+    // still showing. The new content suspends, but React keeps old
+    // content visible (no fallback). The transition should still track
+    // the pending boundary while data loads.
+    await act(() => {
+      startTransition(() => setTab(2), {name: 'switch-tab'});
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    // The transition should start AND report the boundary as pending,
+    // not complete immediately. The fallback renders during the render
+    // phase but is not committed (old content stays visible).
+    assertLog([
+      'Suspend [Tab 2]',
+      'Loading tab...',
+      'onTransitionStart(switch-tab, 2000)',
+      'onMarkerProgress(switch-tab, tabs, 2000, 3000, [tab-content])',
+      'onTransitionProgress(switch-tab, 2000, 3000, [tab-content])',
+    ]);
+
+    // Step 4: Resolve tab 2 — transition completes
+    await act(() => {
+      resolveText('Tab 2');
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Tab 2',
+      'onMarkerProgress(switch-tab, tabs, 2000, 4000, [])',
+      'onMarkerComplete(switch-tab, tabs, 2000, 4000)',
+      'onTransitionProgress(switch-tab, 2000, 4000, [])',
+      'onTransitionComplete(switch-tab, 2000, 4000)',
+    ]);
+  });
 });

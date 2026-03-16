@@ -24,6 +24,7 @@ import type {
   PendingTransitionCallbacks,
   PendingBoundaries,
   TransitionAbort,
+  TracingMarkerInstance,
 } from './ReactFiberTracingMarkerComponent';
 import type {OffscreenInstance} from './ReactFiberOffscreenComponent';
 import type {
@@ -384,7 +385,12 @@ import {
   isLegacyActEnvironment,
   isConcurrentActEnvironment,
 } from './ReactFiberAct';
-import {processTransitionCallbacks} from './ReactFiberTracingMarkerComponent';
+import {
+  processTransitionCallbacks,
+  TransitionTracingMarker,
+  TransitionRoot,
+} from './ReactFiberTracingMarkerComponent';
+import {clearTransitionsForLanes} from './ReactFiberLane';
 import {
   SuspenseException,
   SuspenseActionException,
@@ -534,6 +540,37 @@ const RENDER_TIMEOUT_MS = 500;
 let workInProgressTransitions: Array<Transition> | null = null;
 export function getWorkInProgressTransitions(): null | Array<Transition> {
   return workInProgressTransitions;
+}
+
+// Suspended tracing boundaries collected during render. When a Suspense
+// boundary re-suspends during a transition and React keeps showing old
+// content (no commit), we still need to fire transition tracing callbacks.
+type SuspendedTracingBoundary = {
+  offscreenInstance: OffscreenInstance,
+  markerInstances: Array<TracingMarkerInstance>,
+  transitions: Array<Transition>,
+  name: string | null,
+};
+let workInProgressSuspendedTracingBoundaries: Array<SuspendedTracingBoundary> | null =
+  null;
+
+export function addSuspendedTracingBoundary(
+  offscreenInstance: OffscreenInstance,
+  markerInstances: Array<TracingMarkerInstance>,
+  transitions: Array<Transition>,
+  name: string | null,
+): void {
+  if (enableTransitionTracing) {
+    if (workInProgressSuspendedTracingBoundaries === null) {
+      workInProgressSuspendedTracingBoundaries = [];
+    }
+    workInProgressSuspendedTracingBoundaries.push({
+      offscreenInstance,
+      markerInstances,
+      transitions,
+      name,
+    });
+  }
 }
 
 // The first setState call that eventually caused the current render.
@@ -1467,6 +1504,108 @@ function finishConcurrentRender(
         workInProgressDeferredLane,
         didAttemptEntireTree,
       );
+
+      if (enableTransitionTracing) {
+        // Even though we're not committing, fire transition tracing
+        // callbacks so that pending Suspense boundaries are tracked.
+        const transitions = workInProgressTransitions;
+        if (
+          transitions !== null &&
+          workInProgressSuspendedTracingBoundaries !== null
+        ) {
+          // Fire transition start callbacks
+          transitions.forEach(transition => {
+            addTransitionStartCallbackToPendingTransition(transition);
+          });
+
+          // Process suspended boundaries: populate pendingBoundaries
+          // on marker instances and _pendingMarkers on Offscreen instances
+          workInProgressSuspendedTracingBoundaries.forEach(
+            ({offscreenInstance, markerInstances, transitions: boundaryTransitions, name}) => {
+              markerInstances.forEach(markerInstance => {
+                // Re-populate transitions on TracingMarker instances that
+                // had their transitions cleared when a previous transition
+                // completed. Without this, the marker won't be associated
+                // with the new transition.
+                if (
+                  markerInstance.tag === TransitionTracingMarker &&
+                  markerInstance.transitions === null
+                ) {
+                  markerInstance.transitions = new Set(boundaryTransitions);
+                  markerInstance.pendingBoundaries = null;
+                  markerInstance.aborts = null;
+                }
+
+                if (markerInstance.pendingBoundaries === null) {
+                  markerInstance.pendingBoundaries = new Map();
+                }
+                if (
+                  !markerInstance.pendingBoundaries.has(offscreenInstance)
+                ) {
+                  markerInstance.pendingBoundaries.set(offscreenInstance, {
+                    name,
+                  });
+                  if (offscreenInstance._pendingMarkers === null) {
+                    offscreenInstance._pendingMarkers = new Set();
+                  }
+                  offscreenInstance._pendingMarkers.add(markerInstance);
+
+                  // Fire progress callbacks
+                  const markerTransitions = markerInstance.transitions;
+                  if (markerTransitions !== null) {
+                    if (
+                      markerInstance.tag === TransitionTracingMarker &&
+                      markerInstance.name !== null
+                    ) {
+                      addMarkerProgressCallbackToPendingTransition(
+                        markerInstance.name,
+                        markerTransitions,
+                        markerInstance.pendingBoundaries,
+                      );
+                    } else if (markerInstance.tag === TransitionRoot) {
+                      markerTransitions.forEach(transition => {
+                        addTransitionProgressCallbackToPendingTransition(
+                          transition,
+                          markerInstance.pendingBoundaries,
+                        );
+                      });
+                    }
+                  }
+                }
+              });
+            },
+          );
+
+          workInProgressSuspendedTracingBoundaries = null;
+
+          // Clear transition info from lanes to prevent double-firing
+          // of onTransitionStart when the data resolves and commits.
+          clearTransitionsForLanes(root, lanes);
+
+          // Schedule callback processing. Use now() instead of
+          // schedulePostPaintCallback because no commit/paint happened.
+          // Using schedulePostPaintCallback would delay these callbacks
+          // until the next paint (which happens during the resolve commit),
+          // causing incorrect timestamps and out-of-order delivery.
+          const prevRootTransitionCallbacks = root.transitionCallbacks;
+          if (prevRootTransitionCallbacks !== null) {
+            const prevPendingTransitionCallbacks =
+              currentPendingTransitionCallbacks;
+            if (prevPendingTransitionCallbacks !== null) {
+              currentPendingTransitionCallbacks = null;
+              const suspendEndTime = now();
+              scheduleCallback(IdleSchedulerPriority, () => {
+                processTransitionCallbacks(
+                  prevPendingTransitionCallbacks,
+                  suspendEndTime,
+                  prevRootTransitionCallbacks,
+                );
+              });
+            }
+          }
+        }
+      }
+
       return;
     }
     case RootErrored: {
@@ -2283,6 +2422,7 @@ function prepareFreshStack(root: FiberRoot, lanes: Lanes): Fiber {
   workInProgressRootConcurrentErrors = null;
   workInProgressRootRecoverableErrors = null;
   workInProgressRootDidIncludeRecursiveRenderUpdate = false;
+  workInProgressSuspendedTracingBoundaries = null;
 
   // Get the lanes that are entangled with whatever we're about to render. We
   // track these separately so we can distinguish the priority of the render

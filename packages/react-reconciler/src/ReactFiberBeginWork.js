@@ -272,6 +272,7 @@ import {
   markRenderDerivedCause,
   getWorkInProgressRoot,
   peekDeferredLane,
+  addSuspendedTracingBoundary,
 } from './ReactFiberWorkLoop';
 import {enqueueConcurrentRenderForLane} from './ReactFiberConcurrentUpdates';
 import {pushCacheProvider, CacheContext} from './ReactFiberCacheComponent';
@@ -2578,6 +2579,20 @@ function updateSuspenseComponent(
           } else {
             offscreenQueue.transitions = currentTransitions;
             offscreenQueue.markerInstances = parentMarkerInstances;
+          }
+
+          // Track this boundary for transition tracing. If this render
+          // suspends without committing (e.g. re-suspension of an already-
+          // resolved boundary during a transition), we need this info to
+          // fire progress callbacks at the render exit point.
+          const offscreenInstance = primaryChildFragment.stateNode;
+          if (offscreenInstance !== null && parentMarkerInstances !== null) {
+            addSuspendedTracingBoundary(
+              offscreenInstance,
+              parentMarkerInstances,
+              currentTransitions,
+              workInProgress.pendingProps.name || null,
+            );
           }
         }
       }

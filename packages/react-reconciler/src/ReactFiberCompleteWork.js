@@ -1621,6 +1621,20 @@ function completeWork(
           const offscreenFiber: Fiber = (workInProgress.child: any);
           offscreenFiber.flags |= Passive;
         }
+      } else if (!nextDidTimeout && !prevDidTimeout) {
+        // Visible→visible: the boundary was re-suspended during a
+        // transition (no commit), and now the data resolved. Schedule
+        // passive effects if there are pending markers that need cleanup.
+        if (enableTransitionTracing) {
+          const offscreenFiber: Fiber = (workInProgress.child: any);
+          const offscreenInstance: OffscreenInstance = offscreenFiber.stateNode;
+          if (
+            offscreenInstance._pendingMarkers !== null &&
+            offscreenInstance._pendingMarkers.size > 0
+          ) {
+            offscreenFiber.flags |= Passive;
+          }
+        }
       } else if (nextDidTimeout && prevDidTimeout) {
         // Hidden→hidden: only schedule passive effects if this is a
         // genuine interruption (content changed, detected via wakeable
