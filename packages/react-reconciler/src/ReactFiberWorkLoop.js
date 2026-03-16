@@ -1486,6 +1486,12 @@ function finishConcurrentRender(
     }
   }
 
+  // Pre-rendering should not be counted as part of a transition.
+  // Suppress transition callbacks for pure pre-render commits.
+  const transitions = workInProgressRootIsPrerendering
+    ? null
+    : workInProgressTransitions;
+
   if (shouldForceFlushFallbacksInDEV()) {
     // We're inside an `act` scope. Commit immediately.
     completeRoot(
@@ -1493,7 +1499,7 @@ function finishConcurrentRender(
       finishedWork,
       lanes,
       workInProgressRootRecoverableErrors,
-      workInProgressTransitions,
+      transitions,
       workInProgressRootDidIncludeRecursiveRenderUpdate,
       workInProgressDeferredLane,
       workInProgressRootInterleavedUpdatedLanes,
@@ -1545,7 +1551,7 @@ function finishConcurrentRender(
             root,
             finishedWork,
             workInProgressRootRecoverableErrors,
-            workInProgressTransitions,
+            transitions,
             workInProgressRootDidIncludeRecursiveRenderUpdate,
             lanes,
             workInProgressDeferredLane,
@@ -1566,7 +1572,7 @@ function finishConcurrentRender(
       root,
       finishedWork,
       workInProgressRootRecoverableErrors,
-      workInProgressTransitions,
+      transitions,
       workInProgressRootDidIncludeRecursiveRenderUpdate,
       lanes,
       workInProgressDeferredLane,

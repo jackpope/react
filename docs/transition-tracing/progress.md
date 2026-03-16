@@ -32,7 +32,7 @@ The feature exists in the codebase behind a feature flag (off in all production 
 - [x] **02 - onTransitionIncomplete**: Implement the 7th callback accumulator. The callback type exists but is dead code -- never dispatched in `processTransitionCallbacks`.
 - [x] **08 - Mutable Pending Array**: Clone `SuspenseInfo` objects in `onMarkerProgress` and `onTransitionProgress` callbacks so users can't mutate React internals. Trivial fix (~6 lines).
 - [x] **09 - Abort Metadata**: Expand `TransitionAbort` type with `endTime`, `newName`, `error`, `componentStack`. Wire up `'error'` and `'unknown'` abort reasons (currently dead). Error boundary integration (Phase 3) deferred.
-- [ ] **15 - Pre-rendering Exclusion**: Exclude pre-rendered (OffscreenLane) trees from transition metrics. Deferred until `<Activity>` semantics stabilize.
+- [x] **15 - Pre-rendering Exclusion**: Exclude pre-rendered (OffscreenLane) trees from transition metrics. Two-part fix: (1) root-level suppression nulls out `pendingPassiveTransitions` for pure pre-render commits, (2) per-Offscreen guard in `commitOffscreenPassiveMountEffects` skips transition tracking when `committedLanes` contains only `OffscreenLane`.
 
 ### P2 -- Important for adoption
 

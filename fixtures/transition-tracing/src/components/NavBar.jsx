@@ -33,6 +33,11 @@ export default function NavBar({onNavigate, currentPage, profileId}) {
         onClick={() => onNavigate('search')}>
         Search
       </button>
+      <button
+        className={buttonClass('activity')}
+        onClick={() => onNavigate('activity')}>
+        Activity
+      </button>
     </nav>
   );
 }

@@ -1,0 +1,73 @@
+.page {
+  max-width: 600px;
+}
+
+.description {
+  color: #8b949e;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.section {
+  padding: 16px 0;
+  border-bottom: 1px solid #21262d;
+}
+
+.section h3 {
+  margin: 0 0 6px;
+  font-weight: 600;
+}
+
+.meta {
+  color: #8b949e;
+  font-size: 12px;
+}
+
+.tabBar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.tab {
+  padding: 6px 14px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+  color: #8b949e;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.tab:hover {
+  color: #e6edf3;
+  border-color: #8b949e;
+}
+
+.tabActive {
+  composes: tab;
+  background-color: #1f6feb;
+  border-color: #1f6feb;
+  color: #fff;
+  font-weight: 600;
+}
+
+.revealButton {
+  margin-left: auto;
+  padding: 6px 14px;
+  border: 1px solid #238636;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+  color: #3fb950;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.revealButton:hover {
+  background-color: #238636;
+  color: #fff;
+}

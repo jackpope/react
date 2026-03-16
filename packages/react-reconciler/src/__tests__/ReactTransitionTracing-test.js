@@ -2524,6 +2524,8 @@ describe('ReactInteractionTracing', () => {
       await waitForAll([
         'Suspend [Page Two]',
         'Loading...',
+        // pre-warming
+        'Suspend [Page Two]',
         'onTransitionStart(nav, 1000)',
       ]);
 
@@ -2537,8 +2539,8 @@ describe('ReactInteractionTracing', () => {
       // onTransitionIncomplete should fire since all markers were deleted
       assertLog([
         'Page One',
-        'onMarkerIncomplete(nav, marker, 1000, [{endTime: 3000, name: marker, type: marker}])',
-        'onTransitionIncomplete(nav, 1000, [{endTime: 3000, name: marker, type: marker}])',
+        'onMarkerIncomplete(nav, marker, 1000, [{endTime: 3000, name: marker, type: marker}, {endTime: 3000, name: null, type: suspense}])',
+        'onTransitionIncomplete(nav, 1000, [{endTime: 3000, name: marker, type: marker}, {endTime: 3000, name: null, type: suspense}])',
       ]);
     });
   });
@@ -2599,6 +2601,8 @@ describe('ReactInteractionTracing', () => {
       await waitForAll([
         'Suspend [Page Two]',
         'Loading...',
+        // pre-warming
+        'Suspend [Page Two]',
         'onTransitionStart(nav, 1000)',
       ]);
 
@@ -2697,6 +2701,8 @@ describe('ReactInteractionTracing', () => {
         'Suspend [A]',
         'Loading A...',
         'Home',
+        // pre-warming
+        'Suspend [A]',
         'onTransitionStart(transition-a, 1000)',
       ]);
 
@@ -2711,6 +2717,9 @@ describe('ReactInteractionTracing', () => {
         'Suspend [B]',
         'Loading B...',
         'Home',
+        // pre-warming
+        'Suspend [A]',
+        'Suspend [B]',
         'onTransitionStart(transition-b, 2000)',
       ]);
 
@@ -2726,10 +2735,10 @@ describe('ReactInteractionTracing', () => {
       assertLog([
         'B',
         'Home',
-        'onMarkerIncomplete(transition-a, marker-a, 1000, [{endTime: 4000, name: marker-a, type: marker}])',
-        'onTransitionIncomplete(transition-a, 1000, [{endTime: 4000, name: marker-a, type: marker}])',
         'onMarkerComplete(transition-b, marker-b, 2000, 4000)',
+        'onMarkerIncomplete(transition-a, marker-a, 1000, [{endTime: 4000, name: marker-a, type: marker}, {endTime: 4000, name: null, type: suspense}])',
         'onTransitionComplete(transition-b, 2000, 4000)',
+        'onTransitionIncomplete(transition-a, 1000, [{endTime: 4000, name: marker-a, type: marker}, {endTime: 4000, name: null, type: suspense}])',
       ]);
     });
   });
@@ -2807,7 +2816,10 @@ describe('ReactInteractionTracing', () => {
       await waitForAll([
         'Suspend [Page Content]',
         'Loading...',
+        // pre-warming
+        'Suspend [Page Content]',
         'onTransitionStart(navigate, 1000)',
+        'onTransitionProgress(navigate, 1000, 2000, [<null>])',
       ]);
 
       // User navigates back before content loads (markers removed)
@@ -2820,8 +2832,8 @@ describe('ReactInteractionTracing', () => {
       // Transition should be incomplete since markers were removed by navigation
       assertLog([
         'Home',
-        'onMarkerIncomplete(navigate, page-marker, 1000, [{endTime: 3000, name: page-marker, type: marker}])',
-        'onTransitionIncomplete(navigate, 1000, [{endTime: 3000, name: page-marker, type: marker}])',
+        'onMarkerIncomplete(navigate, page-marker, 1000, [{endTime: 3000, name: page-marker, type: marker}, {endTime: 3000, name: null, type: suspense}])',
+        'onTransitionIncomplete(navigate, 1000, [{endTime: 3000, name: page-marker, type: marker}, {endTime: 3000, name: null, type: suspense}])',
       ]);
     });
   });
@@ -2858,24 +2870,24 @@ describe('ReactInteractionTracing', () => {
       },
     };
 
-    let setShow;
+    let setPage;
     function App() {
-      const [show, _setShow] = useState(true);
-      setShow = _setShow;
+      const [page, _setPage] = useState('home');
+      setPage = _setPage;
+      if (page === 'home') {
+        return <Text text="Home" />;
+      }
+      if (page === 'hidden') {
+        return <Text text="Hidden" />;
+      }
       return (
-        <div>
-          {show ? (
-            <React.unstable_TracingMarker name="marker">
-              <Suspense
-                name="suspense one"
-                fallback={<Text text="Loading..." />}>
-                <AsyncText text="Content" />
-              </Suspense>
-            </React.unstable_TracingMarker>
-          ) : (
-            <Text text="Hidden" />
-          )}
-        </div>
+        <React.unstable_TracingMarker name="marker">
+          <Suspense
+            name="suspense one"
+            fallback={<Text text="Loading..." />}>
+            <AsyncText text="Content" />
+          </Suspense>
+        </React.unstable_TracingMarker>
       );
     }
 
@@ -2886,15 +2898,10 @@ describe('ReactInteractionTracing', () => {
       root.render(<App />);
       ReactNoop.expire(1000);
       await advanceTimers(1000);
-      await waitForAll([
-        'Suspend [Content]',
-        'Loading...',
-        // pre-warming
-        'Suspend [Content]',
-        // end pre-warming
-      ]);
+      await waitForAll(['Home']);
 
-      startTransition(() => root.render(<App />), {name: 'transition'});
+      // Transition to the page with suspending content
+      startTransition(() => setPage('content'), {name: 'transition'});
       ReactNoop.expire(1000);
       await advanceTimers(1000);
       await waitForAll([
@@ -2902,7 +2909,6 @@ describe('ReactInteractionTracing', () => {
         'Loading...',
         // pre-warming
         'Suspend [Content]',
-        // end pre-warming
         'onTransitionStart(transition, 1000)',
       ]);
 
@@ -2911,14 +2917,14 @@ describe('ReactInteractionTracing', () => {
       await advanceTimers(1000);
 
       await act(async () => {
-        setShow(false);
+        setPage('hidden');
       });
 
       // The abort endTime should reflect when the abort was detected (3000)
       assertLog([
         'Hidden',
-        'onMarkerIncomplete(transition, marker, 1000, [{endTime: 3000, name: marker, type: marker}])',
-        'onTransitionIncomplete(transition, 1000, [{endTime: 3000, name: marker, type: marker}])',
+        'onMarkerIncomplete(transition, marker, 1000, [{endTime: 3000, name: marker, type: marker}, {endTime: 3000, name: suspense one, type: suspense}])',
+        'onTransitionIncomplete(transition, 1000, [{endTime: 3000, name: marker, type: marker}, {endTime: 3000, name: suspense one, type: suspense}])',
       ]);
     });
   });
@@ -2950,20 +2956,20 @@ describe('ReactInteractionTracing', () => {
       },
     };
 
-    let setShow;
+    let setPage;
     function App() {
-      const [show, _setShow] = useState(true);
-      setShow = _setShow;
+      const [page, _setPage] = useState('home');
+      setPage = _setPage;
+      if (page === 'home') {
+        return <Text text="Home" />;
+      }
+      if (page === 'gone') {
+        return <Text text="Gone" />;
+      }
       return (
-        <div>
-          {show ? (
-            <Suspense name="my-boundary" fallback={<Text text="Loading..." />}>
-              <AsyncText text="Content" />
-            </Suspense>
-          ) : (
-            <Text text="Gone" />
-          )}
-        </div>
+        <Suspense name="my-boundary" fallback={<Text text="Loading..." />}>
+          <AsyncText text="Content" />
+        </Suspense>
       );
     }
 
@@ -2974,15 +2980,10 @@ describe('ReactInteractionTracing', () => {
       root.render(<App />);
       ReactNoop.expire(1000);
       await advanceTimers(1000);
-      await waitForAll([
-        'Suspend [Content]',
-        'Loading...',
-        // pre-warming
-        'Suspend [Content]',
-        // end pre-warming
-      ]);
+      await waitForAll(['Home']);
 
-      startTransition(() => root.render(<App />), {name: 'load'});
+      // Transition to the page with suspending content
+      startTransition(() => setPage('content'), {name: 'load'});
       ReactNoop.expire(1000);
       await advanceTimers(1000);
       await waitForAll([
@@ -2990,7 +2991,6 @@ describe('ReactInteractionTracing', () => {
         'Loading...',
         // pre-warming
         'Suspend [Content]',
-        // end pre-warming
         'onTransitionStart(load, 1000)',
       ]);
 
@@ -2999,7 +2999,7 @@ describe('ReactInteractionTracing', () => {
       await advanceTimers(1000);
 
       await act(async () => {
-        setShow(false);
+        setPage('gone');
       });
 
       // The deletion should include type: suspense and the boundary name
@@ -3313,5 +3313,276 @@ describe('ReactInteractionTracing', () => {
         'onTransitionComplete(navigate-to-profile(2), 2000, 5000)',
       ]);
     });
+  });
+
+  // @gate enableTransitionTracing
+  it('pre-render-only commits should not fire transition callbacks', async () => {
+    // When all render lanes are suspended (a pure pre-render), no transition
+    // callbacks should fire — not onTransitionStart, not onTransitionProgress.
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerComplete: (transitioName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitioName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerProgress: (
+        transitioName,
+        markerName,
+        startTime,
+        endTime,
+        pending,
+      ) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onMarkerProgress(${transitioName}, ${markerName}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+    };
+
+    function App() {
+      return (
+        <React.unstable_TracingMarker name="marker">
+          <Suspense fallback={<Text text="Loading..." />}>
+            <AsyncText text="Content" />
+          </Suspense>
+          <Activity mode="hidden">
+            <Suspense
+              name="hidden-boundary"
+              fallback={<Text text="Hidden Loading..." />}>
+              <AsyncText text="Hidden Content" />
+            </Suspense>
+          </Activity>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+
+    // Step 1: Start a transition. The visible content suspends, and the
+    // hidden Activity tree also suspends. Only visible content should
+    // generate transition callbacks.
+    await act(() => {
+      startTransition(() => root.render(<App />), {name: 'transition'});
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Suspend [Content]',
+      'Loading...',
+      // pre-warming
+      'Suspend [Content]',
+      'onTransitionStart(transition, 0)',
+      'onMarkerProgress(transition, marker, 0, 1000, [<null>])',
+      'onTransitionProgress(transition, 0, 1000, [<null>])',
+      'Suspend [Hidden Content]',
+      'Hidden Loading...',
+    ]);
+
+    // Step 2: Resolve the visible content. The transition should complete
+    // even though hidden content is still suspended.
+    await act(() => {
+      resolveText('Content');
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Content',
+      'onMarkerProgress(transition, marker, 0, 2000, [])',
+      'onMarkerComplete(transition, marker, 0, 2000)',
+      'onTransitionProgress(transition, 0, 2000, [])',
+      'onTransitionComplete(transition, 0, 2000)',
+    ]);
+
+    // Step 3: Resolve the hidden content. No transition callbacks should
+    // fire — this is a pre-render resolution.
+    await act(() => {
+      resolveText('Hidden Content');
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog(['Hidden Content']);
+  });
+
+  // @gate enableTransitionTracing
+  it('progress callbacks should not include pre-rendered boundaries', async () => {
+    // When a transition has both visible and hidden Suspense boundaries,
+    // only visible boundaries should appear in progress callbacks.
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerProgress: (
+        transitioName,
+        markerName,
+        startTime,
+        endTime,
+        pending,
+      ) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onMarkerProgress(${transitioName}, ${markerName}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onMarkerComplete: (transitioName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitioName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+    };
+
+    function App({showHidden}) {
+      return (
+        <React.unstable_TracingMarker name="marker">
+          <Suspense
+            name="visible-boundary"
+            fallback={<Text text="Loading Visible..." />}>
+            <AsyncText text="Visible" />
+          </Suspense>
+          <Activity mode="hidden">
+            <Suspense
+              name="hidden-boundary"
+              fallback={<Text text="Loading Hidden..." />}>
+              <AsyncText text="Hidden" />
+            </Suspense>
+          </Activity>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+
+    await act(() => {
+      startTransition(() => root.render(<App />), {name: 'transition'});
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Suspend [Visible]',
+      'Loading Visible...',
+      // pre-warming
+      'Suspend [Visible]',
+      'onTransitionStart(transition, 0)',
+      'onMarkerProgress(transition, marker, 0, 1000, [visible-boundary])',
+      'onTransitionProgress(transition, 0, 1000, [visible-boundary])',
+      'Suspend [Hidden]',
+      'Loading Hidden...',
+    ]);
+
+    // Resolve visible — transition should complete without waiting for hidden
+    await act(() => {
+      resolveText('Visible');
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Visible',
+      'onMarkerProgress(transition, marker, 0, 2000, [])',
+      'onMarkerComplete(transition, marker, 0, 2000)',
+      'onTransitionProgress(transition, 0, 2000, [])',
+      'onTransitionComplete(transition, 0, 2000)',
+    ]);
+  });
+
+  // @gate enableTransitionTracing
+  it('re-appearance of pre-rendered tree triggers normal tracking', async () => {
+    // When a hidden Activity tree becomes visible, new transitions that
+    // affect it should be tracked normally.
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerComplete: (transitioName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitioName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+    };
+
+    let setMode;
+    function App() {
+      const [mode, _setMode] = useState('hidden');
+      setMode = _setMode;
+      return (
+        <React.unstable_TracingMarker name="marker">
+          <Activity mode={mode}>
+            <Suspense fallback={<Text text="Loading..." />}>
+              <AsyncText text="Content" />
+            </Suspense>
+          </Activity>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+
+    // Step 1: Initial render with hidden Activity — pre-renders content
+    await act(() => {
+      startTransition(() => root.render(<App />), {name: 'initial'});
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Suspend [Content]',
+      'Loading...',
+      'onTransitionStart(initial, 0)',
+      'onMarkerComplete(initial, marker, 0, 1000)',
+      'onTransitionComplete(initial, 0, 1000)',
+    ]);
+
+    // Step 2: Resolve the hidden content (no callbacks expected)
+    await act(() => {
+      resolveText('Content');
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog(['Content']);
+
+    // Step 3: Reveal the Activity tree via a new transition
+    await act(() => {
+      startTransition(() => setMode('visible'), {name: 'reveal'});
+      ReactNoop.expire(1000);
+      advanceTimers(1000);
+    });
+    assertLog([
+      'Content',
+      'onTransitionStart(reveal, 2000)',
+      'onTransitionComplete(reveal, 2000, 3000)',
+    ]);
   });
 });

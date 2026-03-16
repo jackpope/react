@@ -4,6 +4,7 @@ import NavBar from './components/NavBar';
 import HomePage from './components/HomePage';
 import ProfilePage from './components/ProfilePage';
 import SearchPage from './components/SearchPage';
+import ActivityPage from './components/ActivityPage';
 import TracingDashboard from './dashboard/TracingDashboard';
 import {clearCache} from './hooks/useSimulatedDelay';
 
@@ -44,6 +45,9 @@ export default function App({eventEmitter}) {
       break;
     case 'search':
       content = <SearchPage />;
+      break;
+    case 'activity':
+      content = <ActivityPage eventEmitter={eventEmitter} />;
       break;
     case 'home':
     default:

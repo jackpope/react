@@ -35,6 +35,8 @@ function EventRow({event}) {
     timestamps = `start: ${formatMs(event.startTime)} current: ${formatMs(event.currentTime)}`;
   } else if (event.startTime != null) {
     timestamps = `start: ${formatMs(event.startTime)}`;
+  } else if (event.timestamp != null) {
+    timestamps = `at: ${formatMs(event.timestamp)}`;
   }
 
   let detail = null;

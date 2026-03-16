@@ -4,6 +4,8 @@ const delays = {
   profileFeed: 2000,
   fullSizePhoto: 800,
   searchResults: 1200,
+  activityVisible: 1000,
+  activityHidden: 2500,
 };
 
 const shouldError = {};
@@ -25,7 +27,12 @@ export function setShouldError(resource, bool) {
 }
 
 export function fetchResource(resource, id) {
-  const ms = delays[resource] !== undefined ? delays[resource] : 1000;
+  if (delays[resource] === undefined) {
+    throw new Error(
+      `Unknown resource "${resource}". Add it to the delays map in fakeApi.js`
+    );
+  }
+  const ms = delays[resource];
 
   return new Promise((resolve, reject) => {
     setTimeout(() => {

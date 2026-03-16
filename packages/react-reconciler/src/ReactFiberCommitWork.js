@@ -21,6 +21,8 @@ import type {
 import type {Fiber, FiberRoot} from './ReactInternalTypes';
 import type {Lanes} from './ReactFiberLane';
 import {
+  NoLanes,
+  OffscreenLane,
   includesLoadingIndicatorLanes,
   includesOnlySuspenseyCommitEligibleLanes,
   includesOnlyViewTransitionEligibleLanes,
@@ -3402,6 +3404,7 @@ function commitOffscreenPassiveMountEffects(
   current: Fiber | null,
   finishedWork: Fiber,
   instance: OffscreenInstance,
+  committedLanes: Lanes,
 ) {
   let previousCache: Cache | null = null;
   if (
@@ -3432,126 +3435,137 @@ function commitOffscreenPassiveMountEffects(
   }
 
   if (enableTransitionTracing) {
-    // TODO: Pre-rendering should not be counted as part of a transition. We
+    // Pre-rendering should not be counted as part of a transition. We
     // may add separate logs for pre-rendering, but it's not part of the
     // primary metrics.
-    const offscreenState: OffscreenState = finishedWork.memoizedState;
-    const queue: OffscreenQueue | null = (finishedWork.updateQueue: any);
+    const isPrerenderCommit =
+      (committedLanes & ~OffscreenLane) === NoLanes;
+    if (isPrerenderCommit) {
+      // This is a prerender-only commit. Discard any queued transition
+      // data so that pre-rendered boundaries don't inflate pending
+      // boundary counts or fire spurious progress callbacks.
+      if (finishedWork.updateQueue !== null) {
+        finishedWork.updateQueue = null;
+      }
+    } else {
+      const offscreenState: OffscreenState = finishedWork.memoizedState;
+      const queue: OffscreenQueue | null = (finishedWork.updateQueue: any);
 
-    const isHidden = offscreenState !== null;
-    const wasHidden = current !== null && current.memoizedState !== null;
+      const isHidden = offscreenState !== null;
+      const wasHidden = current !== null && current.memoizedState !== null;
 
-    if (queue !== null) {
-      if (isHidden) {
-        // Part 2: If this is a hidden→hidden interruption, clean up old
-        // transition associations before adding new ones.
-        if (wasHidden && instance._interrupted) {
-          const oldPendingMarkers = instance._pendingMarkers;
-          if (oldPendingMarkers !== null) {
-            // Get the Suspense boundary name for the abort record
-            let suspenseName = null;
-            const parent = finishedWork.return;
-            if (
-              parent !== null &&
-              parent.tag === SuspenseComponent &&
-              parent.memoizedProps.name
-            ) {
-              suspenseName = parent.memoizedProps.name;
-            }
-            oldPendingMarkers.forEach(markerInstance => {
-              const pendingBoundaries = markerInstance.pendingBoundaries;
+      if (queue !== null) {
+        if (isHidden) {
+          // Part 2: If this is a hidden→hidden interruption, clean up old
+          // transition associations before adding new ones.
+          if (wasHidden && instance._interrupted) {
+            const oldPendingMarkers = instance._pendingMarkers;
+            if (oldPendingMarkers !== null) {
+              // Get the Suspense boundary name for the abort record
+              let suspenseName = null;
+              const parent = finishedWork.return;
               if (
-                pendingBoundaries !== null &&
-                pendingBoundaries.has(instance)
+                parent !== null &&
+                parent.tag === SuspenseComponent &&
+                parent.memoizedProps.name
               ) {
-                pendingBoundaries.delete(instance);
+                suspenseName = parent.memoizedProps.name;
               }
-              const abort: TransitionAbort = {
-                reason: 'suspense',
-                name: suspenseName,
-                endTime: now(),
-              };
-              if (markerInstance.aborts === null) {
-                markerInstance.aborts = [abort];
-              } else {
-                markerInstance.aborts.push(abort);
-              }
-            });
-          }
-          instance._transitions = null;
-          instance._pendingMarkers = null;
-          // Update TracingMarker instances to track the interrupting
-          // transition instead of the old one. Without this, the marker
-          // instance's transitions set still references the old
-          // (interrupted) transition, so the association check below
-          // (instance._transitions.has(transition)) would fail.
-          const newTransitions = queue.transitions;
-          const newMarkerInstances = queue.markerInstances;
-          if (newTransitions !== null && newMarkerInstances !== null) {
-            newMarkerInstances.forEach(markerInst => {
-              if (markerInst.tag === TransitionTracingMarker) {
-                markerInst.transitions = new Set(newTransitions);
-                markerInst.pendingBoundaries = null;
-                markerInst.aborts = null;
-              }
-            });
-          }
-        }
-
-        const transitions = queue.transitions;
-        if (transitions !== null) {
-          transitions.forEach(transition => {
-            // Add all the transitions saved in the update queue during
-            // the render phase (ie the transitions associated with this boundary)
-            // into the transitions set.
-            if (instance._transitions === null) {
-              instance._transitions = new Set();
-            }
-            instance._transitions.add(transition);
-          });
-        }
-
-        const markerInstances = queue.markerInstances;
-        if (markerInstances !== null) {
-          markerInstances.forEach(markerInstance => {
-            const markerTransitions = markerInstance.transitions;
-            // There should only be a few tracing marker transitions because
-            // they should be only associated with the transition that
-            // caused them
-            if (markerTransitions !== null) {
-              markerTransitions.forEach(transition => {
-                if (instance._transitions === null) {
-                  instance._transitions = new Set();
-                } else if (instance._transitions.has(transition)) {
-                  if (markerInstance.pendingBoundaries === null) {
-                    markerInstance.pendingBoundaries = new Map();
-                  }
-                  if (instance._pendingMarkers === null) {
-                    instance._pendingMarkers = new Set();
-                  }
-
-                  instance._pendingMarkers.add(markerInstance);
+              oldPendingMarkers.forEach(markerInstance => {
+                const pendingBoundaries = markerInstance.pendingBoundaries;
+                if (
+                  pendingBoundaries !== null &&
+                  pendingBoundaries.has(instance)
+                ) {
+                  pendingBoundaries.delete(instance);
+                }
+                const abort: TransitionAbort = {
+                  reason: 'suspense',
+                  name: suspenseName,
+                  endTime: now(),
+                };
+                if (markerInstance.aborts === null) {
+                  markerInstance.aborts = [abort];
+                } else {
+                  markerInstance.aborts.push(abort);
                 }
               });
             }
-          });
+            instance._transitions = null;
+            instance._pendingMarkers = null;
+            // Update TracingMarker instances to track the interrupting
+            // transition instead of the old one. Without this, the marker
+            // instance's transitions set still references the old
+            // (interrupted) transition, so the association check below
+            // (instance._transitions.has(transition)) would fail.
+            const newTransitions = queue.transitions;
+            const newMarkerInstances = queue.markerInstances;
+            if (newTransitions !== null && newMarkerInstances !== null) {
+              newMarkerInstances.forEach(markerInst => {
+                if (markerInst.tag === TransitionTracingMarker) {
+                  markerInst.transitions = new Set(newTransitions);
+                  markerInst.pendingBoundaries = null;
+                  markerInst.aborts = null;
+                }
+              });
+            }
+          }
+
+          const transitions = queue.transitions;
+          if (transitions !== null) {
+            transitions.forEach(transition => {
+              // Add all the transitions saved in the update queue during
+              // the render phase (ie the transitions associated with this boundary)
+              // into the transitions set.
+              if (instance._transitions === null) {
+                instance._transitions = new Set();
+              }
+              instance._transitions.add(transition);
+            });
+          }
+
+          const markerInstances = queue.markerInstances;
+          if (markerInstances !== null) {
+            markerInstances.forEach(markerInstance => {
+              const markerTransitions = markerInstance.transitions;
+              // There should only be a few tracing marker transitions because
+              // they should be only associated with the transition that
+              // caused them
+              if (markerTransitions !== null) {
+                markerTransitions.forEach(transition => {
+                  if (instance._transitions === null) {
+                    instance._transitions = new Set();
+                  } else if (instance._transitions.has(transition)) {
+                    if (markerInstance.pendingBoundaries === null) {
+                      markerInstance.pendingBoundaries = new Map();
+                    }
+                    if (instance._pendingMarkers === null) {
+                      instance._pendingMarkers = new Set();
+                    }
+
+                    instance._pendingMarkers.add(markerInstance);
+                  }
+                });
+              }
+            });
+          }
         }
+
+        finishedWork.updateQueue = null;
       }
 
-      finishedWork.updateQueue = null;
-    }
+      // Clear the interrupted flag after processing
+      if (instance._interrupted) {
+        instance._interrupted = false;
+      }
 
-    // Clear the interrupted flag after processing
-    if (instance._interrupted) {
-      instance._interrupted = false;
-    }
+      commitTransitionProgress(finishedWork);
 
-    commitTransitionProgress(finishedWork);
-
-    // TODO: Refactor this into an if/else branch
-    if (!isHidden) {
-      instance._transitions = null;
-      instance._pendingMarkers = null;
+      // TODO: Refactor this into an if/else branch
+      if (!isHidden) {
+        instance._transitions = null;
+        instance._pendingMarkers = null;
+      }
     }
   }
 }
@@ -4044,7 +4058,12 @@ function commitPassiveMountOnFiber(
         if (flags & Passive) {
           const current = finishedWork.alternate;
           const instance: OffscreenInstance = finishedWork.stateNode;
-          commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+          commitOffscreenPassiveMountEffects(
+            current,
+            finishedWork,
+            instance,
+            committedLanes,
+          );
         }
       }
       break;
@@ -4174,7 +4193,12 @@ function commitPassiveMountOnFiber(
       }
 
       if (flags & Passive) {
-        commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+        commitOffscreenPassiveMountEffects(
+          current,
+          finishedWork,
+          instance,
+          committedLanes,
+        );
       }
       break;
     }
@@ -4417,7 +4441,12 @@ export function reconnectPassiveEffects(
           // TODO: Pass `current` as argument to this function
           const current: Fiber | null = finishedWork.alternate;
           const instance: OffscreenInstance = finishedWork.stateNode;
-          commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+          commitOffscreenPassiveMountEffects(
+            current,
+            finishedWork,
+            instance,
+            committedLanes,
+          );
         }
       }
       break;
@@ -4489,7 +4518,12 @@ export function reconnectPassiveEffects(
       if (includeWorkInProgressEffects && flags & Passive) {
         // TODO: Pass `current` as argument to this function
         const current: Fiber | null = finishedWork.alternate;
-        commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+        commitOffscreenPassiveMountEffects(
+          current,
+          finishedWork,
+          instance,
+          committedLanes,
+        );
       }
       break;
     }
@@ -4655,7 +4689,12 @@ function commitAtomicPassiveEffects(
         // TODO: Pass `current` as argument to this function
         const current = finishedWork.alternate;
         const instance: OffscreenInstance = finishedWork.stateNode;
-        commitOffscreenPassiveMountEffects(current, finishedWork, instance);
+        commitOffscreenPassiveMountEffects(
+          current,
+          finishedWork,
+          instance,
+          committedLanes,
+        );
       }
       break;
     }
