@@ -171,6 +171,7 @@ import {
   REACT_SCOPE_TYPE,
   REACT_VIEW_TRANSITION_TYPE,
   REACT_ACTIVITY_TYPE,
+  REACT_TRACING_MARKER_TYPE,
   REACT_OPTIMISTIC_KEY,
 } from 'shared/ReactSymbols';
 import ReactSharedInternals from 'shared/ReactSharedInternals';
@@ -183,6 +184,7 @@ import {
   enableFizzBlockingRender,
   enableAsyncDebugInfo,
   enableCPUSuspense,
+  enableTransitionTracing,
 } from 'shared/ReactFeatureFlags';
 
 import assign from 'shared/assign';
@@ -2955,6 +2957,18 @@ function renderElement(
       renderNodeDestructive(request, task, props.children, -1);
       task.keyPath = prevKeyPath;
       return;
+    }
+    case REACT_TRACING_MARKER_TYPE: {
+      if (enableTransitionTracing) {
+        // TracingMarker is a client-only tracing concept.
+        // On the server, render children directly (like Fragment).
+        const prevKeyPath = task.keyPath;
+        task.keyPath = keyPath;
+        renderNodeDestructive(request, task, props.children, -1);
+        task.keyPath = prevKeyPath;
+        return;
+      }
+      break;
     }
     case REACT_ACTIVITY_TYPE: {
       renderActivity(request, task, keyPath, props);

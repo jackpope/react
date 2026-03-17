@@ -36,7 +36,7 @@ The feature exists in the codebase behind a feature flag (off in all production 
 
 ### P2 -- Important for adoption
 
-- [ ] **04a - Fix TracingMarker in Fizz**: Add `REACT_TRACING_MARKER_TYPE` case to `renderElement` in `ReactFizzServer.js` so TracingMarker renders as a transparent wrapper (like Fragment) instead of crashing. Prerequisite for using TracingMarker in any SSR app. Small effort.
+- [x] **04a - Fix TracingMarker in Fizz**: Add `REACT_TRACING_MARKER_TYPE` case to `renderElement` in `ReactFizzServer.js` so TracingMarker renders as a transparent wrapper (like Fragment) instead of crashing. Prerequisite for using TracingMarker in any SSR app. Small effort.
 - [ ] **01 - Timestamp Accuracy**: Enhance start time to use `window.event.timeStamp` (captures user interaction time, not JS processing time). Implement `requestPostPaintCallback` for DOM end time. The current lazy `performance.now()` init is functionally correct but misses event dispatch overhead.
 - [ ] **14 - CPU Suspense**: Copy IO Suspense tracing block to CPU Suspense path in `updateSuspenseComponent`. ~15 lines, low risk. Depends on `enableCPUSuspense`.
 

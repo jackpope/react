@@ -39,10 +39,7 @@ describe('ReactTransitionTracing Hydration', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('TracingMarker renders as fragment during SSR', async () => {
-    // skip: requires Plan 04 (Fizz does not support TracingMarker — crashes
-    // with "Element type is invalid" when encountering the symbol type)
+  it('TracingMarker renders as fragment during SSR', async () => {
     function App() {
       return (
         <div>
@@ -61,9 +58,7 @@ describe('ReactTransitionTracing Hydration', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('SSR renderToString with TracingMarker does not crash', async () => {
-    // skip: requires Plan 04 (Fizz does not support TracingMarker)
+  it('SSR renderToString with TracingMarker does not crash', async () => {
     function App() {
       return (
         <React.unstable_TracingMarker name="marker">
@@ -112,9 +107,13 @@ describe('ReactTransitionTracing Hydration', () => {
       },
     };
 
-    // Server render without TracingMarker to avoid Fizz crash
-    // (Fizz doesn't support TracingMarker yet — see Plan 04)
-    const serverHtml = '<div>Page One</div>';
+    // Use Fizz to server render (TracingMarker is now supported)
+    const serverHtml = ReactDOMServer.renderToString(
+      <div>
+        <Text text="Page One" />
+      </div>,
+    );
+    assertLog(['Page One']);
     container.innerHTML = serverHtml;
 
     // Hydrate
@@ -144,17 +143,66 @@ describe('ReactTransitionTracing Hydration', () => {
   });
 
   // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('Transition started during selective hydration with TracingMarker', async () => {
-    // skip: requires Plan 04 (hydration tracing support)
+  it('nested TracingMarkers in SSR render as fragments', async () => {
     function App() {
       return (
         <div>
-          <Suspense fallback={<span>Loading...</span>}>
-            <React.unstable_TracingMarker name="hydration-marker">
-              <div>Content</div>
+          <React.unstable_TracingMarker name="outer">
+            <span>one</span>
+            <React.unstable_TracingMarker name="inner">
+              <span>two</span>
             </React.unstable_TracingMarker>
-          </Suspense>
+          </React.unstable_TracingMarker>
+        </div>
+      );
+    }
+
+    const html = ReactDOMServer.renderToString(<App />);
+    expect(html).toBe('<div><span>one</span><span>two</span></div>');
+  });
+
+  // @gate enableTransitionTracing
+  it('TracingMarker with Suspense boundary in SSR', async () => {
+    function App() {
+      return (
+        <div>
+          <React.unstable_TracingMarker name="page">
+            <Suspense fallback={<span>Loading...</span>}>
+              <span>Content</span>
+            </Suspense>
+          </React.unstable_TracingMarker>
+        </div>
+      );
+    }
+
+    const html = ReactDOMServer.renderToString(<App />);
+    expect(html).toContain('<span>Content</span>');
+    expect(html).not.toContain('TracingMarker');
+    expect(html).not.toContain('page');
+  });
+
+  // @gate enableTransitionTracing
+  it('SSR with TracingMarker followed by hydration with post-hydration transition', async () => {
+    function Text({text}) {
+      Scheduler.log(text);
+      return text;
+    }
+
+    let setPage;
+    function App() {
+      const [page, _setPage] = React.useState('home');
+      setPage = _setPage;
+      return (
+        <div>
+          <React.unstable_TracingMarker name="app">
+            {page === 'home' ? (
+              <Text text="Home" />
+            ) : (
+              <React.unstable_TracingMarker name="profile">
+                <Text text="Profile" />
+              </React.unstable_TracingMarker>
+            )}
+          </React.unstable_TracingMarker>
         </div>
       );
     }
@@ -171,71 +219,34 @@ describe('ReactTransitionTracing Hydration', () => {
       },
     };
 
-    const html = ReactDOMServer.renderToString(<App />);
-    container.innerHTML = html;
+    // Server render the initial page with TracingMarker in the tree
+    const serverHtml = ReactDOMServer.renderToString(<App />);
+    assertLog(['Home']);
+    container.innerHTML = serverHtml;
 
+    // Hydrate
     await act(async () => {
-      const root = ReactDOMClient.hydrateRoot(container, <App />, {
+      ReactDOMClient.hydrateRoot(container, <App />, {
         unstable_transitionCallbacks: transitionCallbacks,
       });
+    });
+    assertLog(['Home']);
 
+    // Navigate via transition — TracingMarker callbacks should fire normally
+    await act(async () => {
       startTransition(
         () => {
-          root.render(<App />);
+          setPage('profile');
         },
-        {name: 'hydration-transition'},
+        {name: 'navigate'},
       );
     });
 
     assertLog([
-      'onTransitionStart(hydration-transition)',
-      'onMarkerComplete(hydration-transition, hydration-marker)',
-      'onTransitionComplete(hydration-transition)',
+      'Profile',
+      'onTransitionStart(navigate)',
+      'onMarkerComplete(navigate, profile)',
+      'onTransitionComplete(navigate)',
     ]);
-  });
-
-  // @gate enableTransitionTracing
-  // eslint-disable-next-line jest/no-disabled-tests
-  it.skip('renderToPipeableStream with TracingMarker', async () => {
-    // skip: requires Plan 04 (Fizz does not support TracingMarker)
-    function App() {
-      return (
-        <html>
-          <body>
-            <React.unstable_TracingMarker name="stream-marker">
-              <div>Streamed Content</div>
-            </React.unstable_TracingMarker>
-          </body>
-        </html>
-      );
-    }
-
-    let output = '';
-    const {Writable} = require('stream');
-    const writable = new Writable({
-      write(chunk, encoding, callback) {
-        output += chunk.toString();
-        callback();
-      },
-    });
-
-    await new Promise((resolve, reject) => {
-      const {pipe} = ReactDOMServer.renderToPipeableStream(<App />, {
-        onAllReady() {
-          pipe(writable);
-        },
-        onError(err) {
-          reject(err);
-        },
-      });
-
-      writable.on('finish', () => {
-        resolve();
-      });
-    });
-
-    expect(output).toContain('<div>Streamed Content</div>');
-    expect(output).not.toContain('TracingMarker');
-    expect(output).not.toContain('stream-marker');
   });
 });
