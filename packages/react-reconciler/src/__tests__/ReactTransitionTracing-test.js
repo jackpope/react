@@ -13,6 +13,7 @@ let ReactNoop;
 let Scheduler;
 let act;
 let waitForAll;
+let waitForPaint;
 let assertLog;
 let assertConsoleErrorDev;
 
@@ -47,6 +48,7 @@ describe('ReactInteractionTracing', () => {
     const InternalTestUtils = require('internal-test-utils');
     act = InternalTestUtils.act;
     waitForAll = InternalTestUtils.waitForAll;
+    waitForPaint = InternalTestUtils.waitForPaint;
     assertLog = InternalTestUtils.assertLog;
     assertConsoleErrorDev = InternalTestUtils.assertConsoleErrorDev;
 
@@ -3714,5 +3716,103 @@ describe('ReactInteractionTracing', () => {
       'onTransitionProgress(switch-tab, 2000, 4000, [])',
       'onTransitionComplete(switch-tab, 2000, 4000)',
     ]);
+  });
+
+  // @gate enableTransitionTracing
+  // @gate enableCPUSuspense
+  it('tracks CPU Suspense boundaries in transition tracing', async () => {
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        Scheduler.log(`onTransitionStart(${name}, ${startTime})`);
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onTransitionProgress(${name}, ${startTime}, ${endTime}, [${suspenseNames}])`,
+        );
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        Scheduler.log(
+          `onTransitionComplete(${name}, ${startTime}, ${endTime})`,
+        );
+      },
+      onMarkerProgress: (
+        transitionName,
+        markerName,
+        startTime,
+        currentTime,
+        pending,
+      ) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        Scheduler.log(
+          `onMarkerProgress(${transitionName}, ${markerName}, ${startTime}, ${currentTime}, [${suspenseNames}])`,
+        );
+      },
+      onMarkerComplete: (transitionName, markerName, startTime, endTime) => {
+        Scheduler.log(
+          `onMarkerComplete(${transitionName}, ${markerName}, ${startTime}, ${endTime})`,
+        );
+      },
+    };
+
+    let navigate;
+    function App() {
+      const [show, setShow] = useState(false);
+      navigate = () => setShow(true);
+
+      if (!show) {
+        return <Text text="Home" />;
+      }
+
+      return (
+        <React.unstable_TracingMarker name="marker">
+          <Suspense
+            defer
+            name="cpu-boundary"
+            fallback={<Text text="Loading..." />}>
+            <Text text="Deferred Content" />
+          </Suspense>
+        </React.unstable_TracingMarker>
+      );
+    }
+
+    const root = ReactNoop.createRoot({
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+    await act(async () => {
+      root.render(<App />);
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+      await waitForAll(['Home']);
+    });
+
+    // Navigate inside a transition. The CPU Suspense boundary defers
+    // its children and shows the fallback. Transition tracing should
+    // register the boundary and fire progress callbacks. Because CPU
+    // Suspense retries at SomeRetryLane almost immediately, the
+    // deferred content renders before passive callbacks fire, so
+    // the boundary appears already resolved in the callbacks.
+    // Without the fix, onMarkerProgress would NOT fire at all —
+    // the boundary would never be tracked.
+    await act(async () => {
+      startTransition(() => navigate(), {name: 'nav'});
+      ReactNoop.expire(1000);
+      await advanceTimers(1000);
+
+      await waitForAll([
+        // First paint: fallback shown, deferred tree skipped
+        'Loading...',
+        // Retry: deferred content renders immediately
+        'Deferred Content',
+        // Passive effects fire — boundary was tracked and already resolved
+        'onTransitionStart(nav, 1000)',
+        'onMarkerProgress(nav, marker, 1000, 2000, [])',
+        'onTransitionProgress(nav, 1000, 2000, [])',
+        'onMarkerProgress(nav, marker, 1000, 2000, [])',
+        'onMarkerComplete(nav, marker, 1000, 2000)',
+        'onTransitionProgress(nav, 1000, 2000, [])',
+        'onTransitionComplete(nav, 1000, 2000)',
+      ]);
+    });
   });
 });

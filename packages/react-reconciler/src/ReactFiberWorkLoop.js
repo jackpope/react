@@ -1520,7 +1520,10 @@ function finishConcurrentRender(
 
           // Process suspended boundaries: populate pendingBoundaries
           // on marker instances and _pendingMarkers on Offscreen instances
-          workInProgressSuspendedTracingBoundaries.forEach(
+          const suspendedBoundaries =
+            workInProgressSuspendedTracingBoundaries;
+          if (suspendedBoundaries !== null) {
+          suspendedBoundaries.forEach(
             ({offscreenInstance, markerInstances, transitions: boundaryTransitions, name}) => {
               markerInstances.forEach(markerInstance => {
                 // Re-populate transitions on TracingMarker instances that
@@ -1539,10 +1542,11 @@ function finishConcurrentRender(
                 if (markerInstance.pendingBoundaries === null) {
                   markerInstance.pendingBoundaries = new Map();
                 }
+                const pendingBoundaries = markerInstance.pendingBoundaries;
                 if (
-                  !markerInstance.pendingBoundaries.has(offscreenInstance)
+                  !pendingBoundaries.has(offscreenInstance)
                 ) {
-                  markerInstance.pendingBoundaries.set(offscreenInstance, {
+                  pendingBoundaries.set(offscreenInstance, {
                     name,
                   });
                   if (offscreenInstance._pendingMarkers === null) {
@@ -1560,13 +1564,13 @@ function finishConcurrentRender(
                       addMarkerProgressCallbackToPendingTransition(
                         markerInstance.name,
                         markerTransitions,
-                        markerInstance.pendingBoundaries,
+                        pendingBoundaries,
                       );
                     } else if (markerInstance.tag === TransitionRoot) {
                       markerTransitions.forEach(transition => {
                         addTransitionProgressCallbackToPendingTransition(
                           transition,
-                          markerInstance.pendingBoundaries,
+                          pendingBoundaries,
                         );
                       });
                     }
@@ -1575,6 +1579,7 @@ function finishConcurrentRender(
               });
             },
           );
+          }
 
           workInProgressSuspendedTracingBoundaries = null;
 

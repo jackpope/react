@@ -243,13 +243,14 @@ export function processTransitionCallbacks(
       const onTransitionProgress = callbacks.onTransitionProgress;
       if (onTransitionProgress != null && transitionProgress !== null) {
         transitionProgress.forEach((pendingBoundaries, transition) => {
-          if (transition.name != null) {
+          const transitionName = transition.name;
+          if (transitionName != null) {
             const pending: Array<{name: null | string}> = [];
             pendingBoundaries.forEach(boundary => {
               pending.push({name: boundary.name});
             });
             onTransitionProgress(
-              transition.name,
+              transitionName,
               transition.startTime,
               endTime,
               pending,

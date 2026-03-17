@@ -2489,7 +2489,25 @@ function updateSuspenseComponent(
       );
       workInProgress.memoizedState = SUSPENDED_MARKER;
 
-      // TODO: Transition Tracing is not yet implemented for CPU Suspense.
+      if (enableTransitionTracing) {
+        const currentTransitions = getPendingTransitions();
+        if (currentTransitions !== null) {
+          const parentMarkerInstances = getMarkerInstances();
+          const offscreenQueue: OffscreenQueue | null =
+            (primaryChildFragment.updateQueue: any);
+          if (offscreenQueue === null) {
+            const newOffscreenQueue: OffscreenQueue = {
+              transitions: currentTransitions,
+              markerInstances: parentMarkerInstances,
+              retryQueue: null,
+            };
+            primaryChildFragment.updateQueue = newOffscreenQueue;
+          } else {
+            offscreenQueue.transitions = currentTransitions;
+            offscreenQueue.markerInstances = parentMarkerInstances;
+          }
+        }
+      }
 
       // Since nothing actually suspended, there will nothing to ping this to
       // get it started back up to attempt the next item. While in terms of
