@@ -36,12 +36,13 @@ The feature exists in the codebase behind a feature flag (off in all production 
 
 ### P2 -- Important for adoption
 
-- [ ] **04 - Hydration Tracing**: Add hydration lifecycle tracking. Prerequisite: fix TracingMarker in Fizz server renderer (currently would crash). Large effort.
+- [ ] **04a - Fix TracingMarker in Fizz**: Add `REACT_TRACING_MARKER_TYPE` case to `renderElement` in `ReactFizzServer.js` so TracingMarker renders as a transparent wrapper (like Fragment) instead of crashing. Prerequisite for using TracingMarker in any SSR app. Small effort.
 - [ ] **01 - Timestamp Accuracy**: Enhance start time to use `window.event.timeStamp` (captures user interaction time, not JS processing time). Implement `requestPostPaintCallback` for DOM end time. The current lazy `performance.now()` init is functionally correct but misses event dispatch overhead.
 - [ ] **14 - CPU Suspense**: Copy IO Suspense tracing block to CPU Suspense path in `updateSuspenseComponent`. ~15 lines, low risk. Depends on `enableCPUSuspense`.
 
 ### P3 -- Nice to have / Defer
 
+- [ ] **04b - Hydration Tracing Callbacks**: Add `onHydrationStart/Complete/Progress/Incomplete` callbacks for tracking hydration lifecycle via transition tracing. Requires making TracingMarker active during hydration without `Transition` objects, adding timing infrastructure, and extending `processTransitionCallbacks`. Significant overlap with performance tracks which already provide per-component hydration color coding, "Hydrated"/"Hydration Failed" render phase labels, and boundary-level dehydrated-to-hydrated detection. Main unique value is programmatic callbacks for production RUM and named boundary tracking. Large effort. See overlap analysis in plan 04.
 - [ ] **16 - Redundant clearTransitionsForLanes**: Remove first of two identical `clearTransitionsForLanes` calls in HostRoot passive mount. 1 line removed, trivial.
 - [ ] **12 - Batched Disambiguation**: Add `batchedWith` info to `onTransitionStart` callback — when transitions are batched in the same tick, each receives the names of other transitions in the batch. Helps consumers disambiguate same-tick batched transitions. (Reverted from P1; depends on Plan 19 for interruption correctness.)
 
