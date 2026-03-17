@@ -1,5 +1,5 @@
 import React, {Suspense, useState} from 'react';
-import {useData} from '../hooks/useSimulatedDelay';
+import {useData, invalidate} from '../hooks/useSimulatedDelay';
 import {setShouldError} from '../data/fakeApi';
 import styles from './SearchPage.module.css';
 
@@ -48,6 +48,7 @@ class ErrorBoundary extends React.Component {
 
 export default function SearchPage() {
   const [errorMode, setErrorMode] = useState(false);
+  const [showResults, setShowResults] = useState(true);
 
   function toggleErrorMode() {
     const next = !errorMode;
@@ -55,25 +56,55 @@ export default function SearchPage() {
     setShouldError('searchResults', next);
   }
 
+  function removeResults() {
+    setShowResults(false);
+  }
+
+  function restoreResults() {
+    invalidate('searchResults', 'default');
+    setShowResults(true);
+  }
+
   return (
     <div className={styles.page}>
       <h1>Search</h1>
-      <button
-        onClick={toggleErrorMode}
-        className={errorMode ? styles.errorToggleActive : styles.errorToggle}>
-        {errorMode ? 'Error Mode: ON' : 'Error Mode: OFF'}
-      </button>
-      <TracingMarker name="search">
-        <ErrorBoundary>
-          <Suspense
-            name="search:results"
-            fallback={
-              <div className={styles.meta}>Loading search results...</div>
-            }>
-            <SearchResults />
-          </Suspense>
-        </ErrorBoundary>
-      </TracingMarker>
+      <p className={styles.description}>
+        <strong>Marker incomplete:</strong> Click "Remove Results" while the
+        loading fallback is visible to unmount the TracingMarker during a
+        pending transition. This triggers <code>onMarkerIncomplete</code> with
+        deletion info in the event log.
+      </p>
+      <div className={styles.toolbar}>
+        <button
+          onClick={toggleErrorMode}
+          className={
+            errorMode ? styles.errorToggleActive : styles.errorToggle
+          }>
+          {errorMode ? 'Error Mode: ON' : 'Error Mode: OFF'}
+        </button>
+        {showResults ? (
+          <button className={styles.removeButton} onClick={removeResults}>
+            Remove Results
+          </button>
+        ) : (
+          <button className={styles.restoreButton} onClick={restoreResults}>
+            Restore Results
+          </button>
+        )}
+      </div>
+      {showResults && (
+        <TracingMarker name="search">
+          <ErrorBoundary>
+            <Suspense
+              name="search:results"
+              fallback={
+                <div className={styles.meta}>Loading search results...</div>
+              }>
+              <SearchResults />
+            </Suspense>
+          </ErrorBoundary>
+        </TracingMarker>
+      )}
     </div>
   );
 }

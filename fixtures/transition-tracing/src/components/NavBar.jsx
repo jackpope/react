@@ -1,7 +1,7 @@
 import React from 'react';
 import styles from './NavBar.module.css';
 
-export default function NavBar({onNavigate, currentPage, profileId}) {
+export default function NavBar({onNavigate, currentPage, profileId, isPending}) {
   function buttonClass(page, id) {
     if (page === 'profile') {
       return currentPage === 'profile' && profileId === id
@@ -38,6 +38,12 @@ export default function NavBar({onNavigate, currentPage, profileId}) {
         onClick={() => onNavigate('activity')}>
         Activity
       </button>
+      <button
+        className={buttonClass('cpu')}
+        onClick={() => onNavigate('cpu')}>
+        CPU Suspense
+      </button>
+      {isPending && <span className={styles.pending}>Pending...</span>}
     </nav>
   );
 }

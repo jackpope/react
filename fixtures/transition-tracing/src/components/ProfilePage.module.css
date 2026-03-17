@@ -13,3 +13,30 @@
   color: #8b949e;
   font-size: 12px;
 }
+
+.description {
+  color: #8b949e;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.recsSection {
+  padding-top: 16px;
+}
+
+.recsButton {
+  padding: 6px 14px;
+  border: 1px solid #1f6feb;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: transparent;
+  color: #58a6ff;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.recsButton:hover {
+  background-color: #1f6feb;
+  color: #fff;
+}

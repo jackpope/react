@@ -6,6 +6,9 @@ const delays = {
   searchResults: 1200,
   activityVisible: 1000,
   activityHidden: 2500,
+  recommendations: 1800,
+  cpuHeavyData: 1500,
+  cpuRenderWork: 200,
 };
 
 const shouldError = {};

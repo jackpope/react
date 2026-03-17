@@ -1,16 +1,18 @@
-import React, {useState, startTransition} from 'react';
+import React, {useState, useTransition} from 'react';
 import styles from './App.module.css';
 import NavBar from './components/NavBar';
 import HomePage from './components/HomePage';
 import ProfilePage from './components/ProfilePage';
 import SearchPage from './components/SearchPage';
 import ActivityPage from './components/ActivityPage';
+import CpuSuspensePage from './components/CpuSuspensePage';
 import TracingDashboard from './dashboard/TracingDashboard';
 import {clearCache} from './hooks/useSimulatedDelay';
 
 export default function App({eventEmitter}) {
   const [page, setPage] = useState('home');
   const [profileId, setProfileId] = useState(null);
+  const [isPending, startTransition] = useTransition();
 
   function navigate(target, id) {
     eventEmitter.emit({
@@ -41,13 +43,16 @@ export default function App({eventEmitter}) {
   let content;
   switch (page) {
     case 'profile':
-      content = <ProfilePage id={profileId} />;
+      content = <ProfilePage id={profileId} eventEmitter={eventEmitter} />;
       break;
     case 'search':
       content = <SearchPage />;
       break;
     case 'activity':
       content = <ActivityPage eventEmitter={eventEmitter} />;
+      break;
+    case 'cpu':
+      content = <CpuSuspensePage />;
       break;
     case 'home':
     default:
@@ -62,8 +67,13 @@ export default function App({eventEmitter}) {
           onNavigate={navigate}
           currentPage={page}
           profileId={profileId}
+          isPending={isPending}
         />
-        <div className={styles.content}>{content}</div>
+        <div
+          className={styles.content}
+          style={{opacity: isPending ? 0.6 : 1, transition: 'opacity 0.2s'}}>
+          {content}
+        </div>
       </div>
       <TracingDashboard eventEmitter={eventEmitter} />
     </div>

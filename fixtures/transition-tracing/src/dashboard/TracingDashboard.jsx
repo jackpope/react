@@ -1,6 +1,7 @@
 import React, {useState, useEffect} from 'react';
 import EventLog from './EventLog';
 import Timeline from './Timeline';
+import DelayConfig from './DelayConfig';
 import styles from './TracingDashboard.module.css';
 
 export function createTracingCallbacks() {
@@ -90,8 +91,46 @@ export function createTracingCallbacks() {
   return {callbacks, eventEmitter};
 }
 
+function formatEventForCopy(event) {
+  const parts = [event.type];
+
+  if (event.type === 'user-click') {
+    parts.push(event.label);
+  } else {
+    parts.push(event.name);
+    if (event.marker) {
+      parts.push('> ' + event.marker);
+    }
+  }
+
+  if (event.startTime != null) {
+    parts.push(`start=${event.startTime.toFixed(1)}`);
+  }
+  if (event.endTime != null) {
+    parts.push(`end=${event.endTime.toFixed(1)}`);
+  }
+  if (event.currentTime != null) {
+    parts.push(`current=${event.currentTime.toFixed(1)}`);
+  }
+  if (event.timestamp != null && event.startTime == null) {
+    parts.push(`at=${event.timestamp.toFixed(1)}`);
+  }
+  if (event.pending && event.pending.length > 0) {
+    const names = event.pending
+      .map(p => (typeof p === 'object' ? p.name || '<null>' : p))
+      .join(', ');
+    parts.push(`pending=[${names}]`);
+  }
+  if (event.deletions) {
+    parts.push(`deletions=${JSON.stringify(event.deletions)}`);
+  }
+
+  return parts.join(' ');
+}
+
 export default function TracingDashboard({eventEmitter}) {
   const [events, setEvents] = useState([]);
+  const [copyLabel, setCopyLabel] = useState('Copy');
 
   useEffect(() => {
     if (!eventEmitter) {
@@ -107,14 +146,27 @@ export default function TracingDashboard({eventEmitter}) {
     setEvents([]);
   };
 
+  const handleCopy = () => {
+    const lines = events.map(formatEventForCopy);
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopyLabel('Copied!');
+      setTimeout(() => setCopyLabel('Copy'), 1500);
+    });
+  };
+
   return (
     <div className={styles.container}>
       <div className={styles.panel}>
         <div className={styles.header}>
           <h3 className={styles.title}>Event Log</h3>
-          <button className={styles.clearButton} onClick={handleClear}>
-            Clear
-          </button>
+          <div className={styles.headerButtons}>
+            <button className={styles.copyButton} onClick={handleCopy}>
+              {copyLabel}
+            </button>
+            <button className={styles.clearButton} onClick={handleClear}>
+              Clear
+            </button>
+          </div>
         </div>
         <div className={styles.panelContent}>
           <EventLog events={events} onClear={handleClear} />
@@ -126,6 +178,14 @@ export default function TracingDashboard({eventEmitter}) {
         </div>
         <div className={styles.panelContent}>
           <Timeline events={events} />
+        </div>
+      </div>
+      <div className={styles.panel}>
+        <div className={styles.header}>
+          <h3 className={styles.title}>Delay Config</h3>
+        </div>
+        <div className={styles.panelContent}>
+          <DelayConfig />
         </div>
       </div>
     </div>

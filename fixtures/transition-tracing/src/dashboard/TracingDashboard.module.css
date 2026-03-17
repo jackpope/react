@@ -49,6 +49,28 @@
   letter-spacing: 0.5px;
 }
 
+.headerButtons {
+  display: flex;
+  gap: 6px;
+}
+
+.copyButton {
+  background: none;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  border-radius: 6px;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.copyButton:hover {
+  color: #58a6ff;
+  border-color: #58a6ff;
+}
+
 .clearButton {
   background: none;
   border: 1px solid #30363d;

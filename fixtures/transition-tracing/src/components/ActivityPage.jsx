@@ -45,7 +45,6 @@ export default function ActivityPage({eventEmitter}) {
     startTransition(
       () => {
         setTab(newTab);
-        setPanelVisible(false);
       },
       {name}
     );
@@ -86,6 +85,11 @@ export default function ActivityPage({eventEmitter}) {
         {'<Activity mode="hidden">'} and does <strong>not</strong> block the
         transition. Click "Reveal Panel" to show it — appears instantly if
         already loaded.
+      </p>
+      <p className={styles.description}>
+        <strong>Concurrent transitions:</strong> Tab switches and panel reveals
+        are independent transitions. Switch to Tab 2 and quickly click "Reveal
+        Panel" to see two transitions tracked simultaneously in the event log.
       </p>
 
       <div className={styles.tabBar}>

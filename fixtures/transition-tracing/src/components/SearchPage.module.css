@@ -1,4 +1,18 @@
 .page {
+  max-width: 600px;
+}
+
+.description {
+  color: #8b949e;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.toolbar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
 }
 
 .content {
@@ -13,6 +27,38 @@
 .meta {
   color: #8b949e;
   font-size: 12px;
+}
+
+.removeButton {
+  padding: 6px 14px;
+  cursor: pointer;
+  border: 1px solid #da3633;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #f85149;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.removeButton:hover {
+  background-color: #da3633;
+  color: #fff;
+}
+
+.restoreButton {
+  padding: 6px 14px;
+  cursor: pointer;
+  border: 1px solid #238636;
+  border-radius: 6px;
+  background-color: transparent;
+  color: #3fb950;
+  font-size: 13px;
+  font-family: inherit;
+}
+
+.restoreButton:hover {
+  background-color: #238636;
+  color: #fff;
 }
 
 .errorToggle {
