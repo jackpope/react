@@ -348,4 +348,133 @@ describe('ReactTransitionTracing DOM', () => {
     document.body.removeChild(containerA);
     document.body.removeChild(containerB);
   });
+
+  // @gate enableTransitionTracing
+  // @gate enableCPUSuspense
+  it('should not fire onTransitionIncomplete when navigating away from a resolved CPU Suspense page', async () => {
+    // Reproduces Bug 3: After navigating to a page with CPU Suspense (defer)
+    // and async Suspense wrapped in TracingMarkers, waiting for everything to
+    // resolve, and then navigating back to home, a bogus onTransitionIncomplete
+    // fires for the navigate-to-home transition with deletions referencing the
+    // old page's Suspense boundary.
+
+    let resolveAsyncData;
+    const asyncDataPromise = new Promise(r => {
+      resolveAsyncData = r;
+    });
+    let asyncDataResolved = false;
+
+    function AsyncContent() {
+      if (!asyncDataResolved) {
+        Scheduler.log('Suspend [AsyncContent]');
+        throw asyncDataPromise;
+      }
+      Scheduler.log('AsyncContent');
+      return 'Async Data Loaded';
+    }
+
+    function DeferredContent() {
+      Scheduler.log('DeferredContent');
+      return 'Deferred Content';
+    }
+
+    const TracingMarker = React.unstable_TracingMarker;
+
+    const onTransitionStart = jest.fn();
+    const onTransitionComplete = jest.fn();
+    const onTransitionIncomplete = jest.fn();
+    const onTransitionProgress = jest.fn();
+
+    const transitionCallbacks = {
+      onTransitionStart: (name, startTime) => {
+        onTransitionStart(name, startTime);
+        Scheduler.log(`onTransitionStart(${name})`);
+      },
+      onTransitionProgress: (name, startTime, endTime, pending) => {
+        const suspenseNames = pending.map(p => p.name || '<null>').join(', ');
+        onTransitionProgress(name, startTime, endTime, pending);
+        Scheduler.log(`onTransitionProgress(${name}, [${suspenseNames}])`);
+      },
+      onTransitionComplete: (name, startTime, endTime) => {
+        onTransitionComplete(name, startTime, endTime);
+        Scheduler.log(`onTransitionComplete(${name})`);
+      },
+      onTransitionIncomplete: (name, startTime, deletions) => {
+        onTransitionIncomplete(name, startTime, deletions);
+        Scheduler.log(`onTransitionIncomplete(${name})`);
+      },
+    };
+
+    let setPage;
+    function App() {
+      const [page, _setPage] = useState('home');
+      setPage = _setPage;
+
+      if (page === 'home') {
+        return <Text text="Home" />;
+      }
+
+      return (
+        <TracingMarker name="cpu-suspense">
+          <TracingMarker name="cpu:deferred-section">
+            <Suspense
+              defer
+              name="cpu:deferred"
+              fallback={<Text text="Deferring..." />}>
+              <DeferredContent />
+            </Suspense>
+          </TracingMarker>
+          <TracingMarker name="cpu:async-section">
+            <Suspense
+              name="cpu:async-data"
+              fallback={<Text text="Loading async..." />}>
+              <AsyncContent />
+            </Suspense>
+          </TracingMarker>
+        </TracingMarker>
+      );
+    }
+
+    const root = ReactDOMClient.createRoot(container, {
+      unstable_transitionCallbacks: transitionCallbacks,
+    });
+
+    // Step 1: Render Home
+    await act(async () => {
+      root.render(<App />);
+    });
+    assertLog(['Home']);
+
+    // Step 2: Navigate to CPU Suspense page
+    await act(async () => {
+      startTransition(() => setPage('cpu'), {name: 'navigate-to-cpu'});
+    });
+    // Clear logs — the exact sequence of renders/callbacks during navigation
+    // varies by channel (pre-warming, deferred retry, etc.)
+    Scheduler.unstable_clearLog();
+
+    // Step 3: Resolve async data so everything is visible
+    await act(async () => {
+      asyncDataResolved = true;
+      resolveAsyncData();
+    });
+    Scheduler.unstable_clearLog();
+
+    // At this point, both Suspense boundaries have resolved and the CPU page
+    // is fully rendered. The navigate-to-cpu transition should be complete.
+    expect(container.textContent).toContain('Deferred Content');
+    expect(container.textContent).toContain('Async Data Loaded');
+
+    // Step 4: Navigate back to Home
+    await act(async () => {
+      startTransition(() => setPage('home'), {name: 'navigate-to-home'});
+    });
+
+    expect(container.textContent).toBe('Home');
+
+    // The navigate-to-home transition should complete normally.
+    // Bug 3: a bogus onTransitionIncomplete fires for navigate-to-home
+    // with deletions referencing the old page's Suspense boundary.
+    expect(onTransitionIncomplete).not.toHaveBeenCalled();
+  });
 });

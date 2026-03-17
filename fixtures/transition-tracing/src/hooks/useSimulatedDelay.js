@@ -3,10 +3,6 @@ import {fetchResource} from '../data/fakeApi';
 
 const cache = new Map();
 
-export function clearCache() {
-  cache.clear();
-}
-
 export function invalidate(resource, id) {
   const key = resource + ':' + id;
   cache.delete(key);

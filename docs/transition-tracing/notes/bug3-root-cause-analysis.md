@@ -184,49 +184,160 @@ This deletes the transition from `incompleteTransitions`.
 If the transition is re-discovered in a subsequent render (e.g., pre-warming), `pushRootMarkerInstance`
 re-adds it (since `!incompleteTransitions.has(transition)`), firing a duplicate `transition-start`.
 
+## Deep Dive: Attribution Puzzle
+
+### How `abortRootTransitions` attributes aborts
+
+`abortRootTransitions` (CommitWork.js:922-953) iterates `deletedTransitions` and for
+each transition, checks `incompleteTransitions.has(transition)` using **reference
+equality**. If found, the abort is added to **that transition's** markerInstance:
+
+```javascript
+deletedTransitions.forEach(transition => {
+  if (rootTransitions.has(transition)) {
+    const transitionInstance = rootTransitions.get(transition);
+    transitionInstance.aborts.push(abort);
+    // ...
+  }
+});
+```
+
+The completion check (CommitWork.js:3870-3883) then iterates ALL `incompleteTransitions`
+and for any entry with `aborts !== null`, calls `addTransitionIncompleteCallbackToPendingTransition`
+with **that specific Transition object** as the key:
+
+```javascript
+incompleteTransitions.forEach((markerInstance, transition) => {
+  const pendingBoundaries = markerInstance.pendingBoundaries;
+  if (pendingBoundaries === null || pendingBoundaries.size === 0) {
+    if (markerInstance.aborts === null) {
+      addTransitionCompleteCallbackToPendingTransition(transition);
+    } else {
+      addTransitionIncompleteCallbackToPendingTransition(transition, markerInstance.aborts);
+    }
+    incompleteTransitions.delete(transition);
+  }
+});
+```
+
+### TracingMarker's `transitions` is set only on mount
+
+`updateTracingMarkerComponent` (BeginWork.js:1285-1335):
+- `current === null` (mount): `transitions = new Set(currentTransitions)` — captures
+  the transitions from the `startTransition` call that first rendered this marker
+- `current !== null` (update): does NOT update `transitions` — the stateNode keeps
+  whatever was set on mount
+
+So when the CPU page's TracingMarkers are deleted during `navigate-to-home`:
+- `instance.transitions` still contains `Set([navigate-to-cpu])` from mount
+- The deletion handler calls `abortRootTransitions` with `deletedTransitions = Set([navigate-to-cpu])`
+- `abortRootTransitions` checks `incompleteTransitions.has(navigate-to-cpu)`
+
+### `pushRootMarkerInstance` behavior
+
+`pushRootMarkerInstance` (TracingMarkerComponent.js:368-416) has two modes:
+- **When transitions IS non-null** (rendering with specific transitions): only pushes
+  markers for those transitions onto the stack
+- **When transitions IS null** (non-transition render like retry or setState): pushes
+  ALL incomplete transitions' markers onto the stack
+
+This matters because retry renders (for deferred content) might not have the original
+transition in `workInProgressTransitions`, so they use the "push all" path.
+
+### The attribution paradox
+
+The trace shows `transition-incomplete navigate-to-home`, but the deletion paths
+would attribute it differently:
+
+1. **SuspenseComponent deletion path**: Reads `_transitions` on the Offscreen. As
+   established, `_transitions` is **never set** because `bailoutOffscreenComponent`
+   skips `completeWork` and `commitOffscreenPassiveMountEffects` never runs. So
+   `_transitions` is null → the deletion handler **skips entirely**.
+
+2. **TracingMarkerComponent deletion path**: Reads `instance.transitions` which
+   contains `Set([navigate-to-cpu])`. `abortRootTransitions` checks
+   `incompleteTransitions.has(navigate-to-cpu)`. If found, the abort is added to
+   **`navigate-to-cpu`'s** markerInstance, not `navigate-to-home`'s. The completion
+   check would then fire `transition-incomplete` for `navigate-to-cpu`, NOT `navigate-to-home`.
+
+**This means neither deletion path can directly produce `transition-incomplete navigate-to-home`.**
+
+### Possible explanations for the `navigate-to-home` attribution
+
+**Explanation 1: `processTransitionCallbacks` accumulation**. In the DOM, the
+post-paint callback fires via double rAF (2 frames after commit). If `navigate-to-cpu`'s
+incomplete callback and `navigate-to-home`'s start callback accumulate in the same
+`currentPendingTransitionCallbacks` before being processed, the output in the
+dashboard could conflate them. But `processTransitionCallbacks` processes each
+callback type separately and uses the Transition object (which has the `.name` field).
+So accumulation alone shouldn't cause mis-attribution.
+
+**Explanation 2: Bug 2's premature completion removes `navigate-to-cpu` from
+`incompleteTransitions`, and then `navigate-to-cpu` is re-added during a render where
+the OLD page's TracingMarkers are re-processed**. During such a render:
+- `pushRootMarkerInstance` re-adds `navigate-to-cpu` to `incompleteTransitions`
+  with a NEW markerInstance
+- The TracingMarker's `instance.transitions` still has `Set([navigate-to-cpu])`
+  from mount
+- But when content resolves, the NEW markerInstance's `pendingBoundaries` stays
+  null → bogus completion fires again → `navigate-to-cpu` removed again
+- This cycle eventually settles before `navigate-to-home` starts
+
+**Explanation 3 (most likely): DOM-specific multi-commit batching**. In the real
+browser, commits A (fallback), B (deferred retry), C (async resolve), and D
+(navigate-to-home) may all fire within a short window. Their post-paint callbacks
+fire later via double rAF. If:
+1. Commit A adds `navigate-to-cpu` to `incompleteTransitions`
+2. Commit A's passive effects fire: Bug 2 removes it prematurely (bogus complete)
+3. Commit B (retry render) re-adds `navigate-to-cpu` (duplicate start)
+4. Commit B's passive effects: removes it again (bogus complete)
+5. Commit D (navigate-to-home) starts BEFORE the post-paint callbacks from A/B fire
+6. `navigate-to-home` is added to `incompleteTransitions`
+7. Commit D's passive effects: the TracingMarker deletion handler fires with
+   `deletedTransitions = Set([navigate-to-cpu])`
+8. At this point `navigate-to-cpu` is NOT in `incompleteTransitions` (removed at step 4)
+9. So `abortRootTransitions` doesn't match → no abort added
+
+But then: the accumulated `currentPendingTransitionCallbacks` from commits A-D includes
+a `transitionIncomplete` entry from step 2 or 4 (for `navigate-to-cpu`). When
+`processTransitionCallbacks` finally runs (via the post-paint callback), it processes
+ALL accumulated callbacks together. The `transition-incomplete` in the trace might
+actually be for `navigate-to-cpu`, not `navigate-to-home`, and the fixture dashboard's
+display logic conflates them.
+
+**This needs verification**: Add more detailed logging to `processTransitionCallbacks`
+to see the actual Transition object's name in each callback, vs what the dashboard shows.
+
 ## Remaining Investigation Needed
 
-### 1. When exactly is `_transitions` set to non-null?
+### 1. Verify the actual transition name in `processTransitionCallbacks`
 
-I could NOT definitively trace a path where `_transitions` becomes non-null on the
-CPU page's Offscreens. If `_transitions` stays null, the deletion handler would skip,
-and `transition-incomplete` would NOT fire through that path. This needs verification:
+The fixture dashboard shows `transition-incomplete navigate-to-home`, but the underlying
+callback might actually be for `navigate-to-cpu`. The `processTransitionCallbacks`
+function in `ReactFiberTracingMarkerComponent.js` (line 76-260) processes the
+`transitionIncomplete` Map, where keys are Transition objects with a `.name` property.
+Need to add a `console.log(transition.name)` inside the `transitionIncomplete.forEach`
+to confirm which transition the incomplete is actually attributed to.
 
-**Hypothesis A**: `_transitions` IS set during some render path I haven't traced
+### 2. When exactly is `_transitions` set to non-null?
+
+As established above, `_transitions` is **likely never set** in the CPU Suspense scenario
+because `bailoutOffscreenComponent` prevents `completeWork` from running, which prevents
+the Passive flag from being set, which prevents `commitOffscreenPassiveMountEffects` from
+running. This rules out the SuspenseComponent deletion path.
+
+**Hypothesis A**: `_transitions` IS set during some render path not yet traced
 (e.g., a concurrent render, pre-warming, or OffscreenLane render where the Offscreen
-IS visited with `Passive` flag).
+IS visited with `Passive` flag from a child effect).
 
-**Hypothesis B**: The `transition-incomplete` comes from a DIFFERENT path — not the
-SuspenseComponent deletion handler, but the TracingMarkerComponent deletion handler.
-TracingMarker instances have their own `transitions` field (distinct from `_transitions`),
-and those ARE set during render. When a TracingMarker is deleted, its `transitions` are
-used in `abortParentMarkerTransitionsForDeletedFiber`. If those transitions match
-something in `incompleteTransitions`, abort fires.
+**Hypothesis B (partially ruled out)**: The TracingMarkerComponent deletion path fires,
+but as analyzed above, it would attribute the abort to `navigate-to-cpu`, not
+`navigate-to-home`. Unless the dashboard conflates the output.
 
 **Hypothesis C**: The issue is with `processTransitionCallbacks` accumulation. Multiple
 commits accumulate callbacks in `currentPendingTransitionCallbacks` before the post-paint
 callback fires. This accumulation can cause duplicate starts and orphaned incomplete events.
-
-### 2. TracingMarker deletion path (Hypothesis B — most likely)
-
-When the CPU page is deleted, TracingMarker components ARE deleted. Their deletion
-handler (CommitWork.js:5347-5378) reads `instance.transitions` (the TracingMarkerInstance's
-transitions set, NOT `_transitions`). This is set during render in `beginWork` for
-TracingMarkerComponent and is NOT cleared when the content resolves.
-
-The TracingMarker's `transitions` contains the `navigate-to-cpu` Transition object.
-When `abortRootTransitions` runs, it checks `incompleteTransitions.has(navigate-to-cpu)`.
-
-**If `navigate-to-cpu` is still in `incompleteTransitions`** (because boundaries were
-never removed, so the completion check never fired), then the abort IS added to the
-`navigate-to-cpu` markerInstance.
-
-But the trace shows `transition-incomplete navigate-to-home`, not `navigate-to-cpu`.
-So this doesn't directly explain it.
-
-**Unless**: There's a timing issue in the DOM where `navigate-to-cpu` IS still in
-`incompleteTransitions` when the `navigate-to-home` commit runs, and somehow the
-abort gets attributed to `navigate-to-home`.
+This is the most likely explanation but needs verification per item #1 above.
 
 ### 3. The `_interrupted` flag path
 
@@ -234,6 +345,63 @@ abort gets attributed to `navigate-to-home`.
 the wakeable changes. This could interact with the hidden→hidden interruption handling
 in `commitOffscreenPassiveMountEffects` (line 3464-3515). Need to check if this path
 could cause `_transitions` to be set or marker instances to be contaminated.
+
+### 4. DOM-specific `requestPostPaintCallback` timing
+
+The DOM renderer uses double rAF (ReactFiberConfigDOM.js:4600-4604):
+```javascript
+export function requestPostPaintCallback(callback) {
+  localRequestAnimationFrame(() => {
+    localRequestAnimationFrame(time => callback(time));
+  });
+}
+```
+
+ReactNoop calls the callback synchronously (createReactNoop.js:612-615):
+```javascript
+requestPostPaintCallback(callback) {
+  const endTime = Scheduler.unstable_now();
+  callback(endTime);
+},
+```
+
+This means in the DOM:
+- After commitRootImpl, the post-paint callback is scheduled ~2 frames out
+- Passive effects run BEFORE the post-paint callback fires
+- In `flushPassiveEffectsImpl` (WorkLoop.js:4958-4976), path 3 requires
+  `currentEndTime !== null` to process callbacks — but `currentEndTime` is null
+  (post-paint hasn't fired yet) → callbacks are NOT processed in path 3
+- Later, the post-paint callback fires (WorkLoop.js:4557-4572): if
+  `currentPendingTransitionCallbacks` is non-null, processes them (path 2);
+  otherwise stashes `currentEndTime` for the next `flushPassiveEffectsImpl`
+
+In ReactNoop:
+- `requestPostPaintCallback` fires synchronously during commitRootImpl
+- `currentEndTime` is set BEFORE passive effects run
+- `flushPassiveEffectsImpl` path 3 sees `currentEndTime` non-null → processes
+  callbacks immediately after all passive effects
+
+**Key difference**: In DOM, callbacks from MULTIPLE commits accumulate in
+`currentPendingTransitionCallbacks` before being processed in a single
+`processTransitionCallbacks` call. In ReactNoop, callbacks are processed after
+each commit's passive effects.
+
+## DOM Test Attempt
+
+A DOM test was written in `ReactTransitionTracing-dom-test.js` that mirrors the
+fixture flow (navigate to CPU page → resolve → navigate home), but it **passes**
+because `act()` synchronizes all timing:
+
+1. `act()` flushes all renders, commits, and passive effects synchronously
+2. jsdom's `requestAnimationFrame` uses `setTimeout(cb, 0)`, which `act()` also flushes
+3. This means the post-paint callback fires within the same `act()` block, preventing
+   the multi-commit batching that occurs in the real browser
+
+To reproduce the bug in a unit test, we would need to either:
+- Mock `requestAnimationFrame` to control exactly when it fires
+- Break `act()` blocks to allow specific interleaving
+- OR: instrument the code to detect the stale state directly (e.g., assert that
+  `incompleteTransitions` does not contain `navigate-to-cpu` after resolution)
 
 ## User's Constraint
 
@@ -301,25 +469,38 @@ that the TracingMarker's `transitions` field is stale.
 
 | File | Lines | What |
 |------|-------|------|
-| CommitWork.js | 809-829 | `bailoutOffscreenComponent` — skips Offscreen, returns sibling |
-| CommitWork.js | 920-953 | `abortRootTransitions` — checks incompleteTransitions.has() |
-| CommitWork.js | 955-1013 | `abortTracingMarkerTransitions` — adds abort to marker |
-| CommitWork.js | 1014-1053 | `abortParentMarkerTransitionsForDeletedFiber` — walks up tree |
-| CommitWork.js | 3406-3574 | `commitOffscreenPassiveMountEffects` — sets/clears _transitions |
-| CommitWork.js | 3523-3526 | Where `_transitions` is SET |
-| CommitWork.js | 3568-3570 | Where `_transitions` is CLEARED |
-| CommitWork.js | 4179-4186 | `flags & Passive` gate for commitOffscreenPassiveMountEffects |
-| CommitWork.js | 5304-5341 | SuspenseComponent deletion handler — reads `_transitions` |
-| CommitWork.js | 5347-5378 | TracingMarkerComponent deletion handler — reads `instance.transitions` |
+| BeginWork.js | 770-774 | Offscreen beginWork reads `_transitions` for hidden→visible |
+| BeginWork.js | 1285-1335 | `updateTracingMarkerComponent` — sets `transitions` on mount only |
 | BeginWork.js | 2432-2470 | SuspenseComponent mount fallback path (sets offscreenQueue, calls bailout) |
 | BeginWork.js | 2471-2521 | SuspenseComponent CPU defer path (same pattern) |
 | BeginWork.js | 2555-2623 | SuspenseComponent update → still showing fallback (sets offscreenQueue, calls bailout) |
 | BeginWork.js | 2624-2647 | SuspenseComponent update → showing content (NO transition data set) |
-| BeginWork.js | 770-774 | Offscreen beginWork reads `_transitions` for hidden→visible |
+| CommitWork.js | 809-829 | `bailoutOffscreenComponent` — skips Offscreen, returns sibling |
+| CommitWork.js | 920-953 | `abortRootTransitions` — iterates `deletedTransitions`, checks `has()` by ref equality |
+| CommitWork.js | 955-1013 | `abortTracingMarkerTransitions` — adds abort to marker's markerInstance |
+| CommitWork.js | 1014-1053 | `abortParentMarkerTransitionsForDeletedFiber` — walks up tree to HostRoot |
+| CommitWork.js | 3406-3574 | `commitOffscreenPassiveMountEffects` — sets/clears `_transitions` |
+| CommitWork.js | 3523-3526 | Where `_transitions` is SET |
+| CommitWork.js | 3568-3570 | Where `_transitions` is CLEARED |
+| CommitWork.js | 3870-3883 | Completion check: iterates `incompleteTransitions`, fires complete/incomplete |
+| CommitWork.js | 4179-4186 | `flags & Passive` gate for `commitOffscreenPassiveMountEffects` |
+| CommitWork.js | 5321-5357 | SuspenseComponent deletion handler — reads `_transitions` from OffscreenInstance |
+| CommitWork.js | 5364-5396 | TracingMarkerComponent deletion handler — reads `instance.transitions` from TracingMarkerInstance |
+| CompleteWork.js | 1106-1115 | HostRoot completeWork — sets Passive if transitions exist |
 | CompleteWork.js | 2036-2048 | Fix 3 location (sets Passive if offscreenQueue has transition data) |
-| WorkLoop.js | 3925-3935 | Fix 1 location (clears currentEndTime) |
-| WorkLoop.js | 4965-4987 | Moved completion check in flushPassiveEffectsImpl |
-| TracingMarkerComponent.js | 368-416 | `pushRootMarkerInstance` — pushes ALL incompleteTransitions markers |
+| WorkLoop.js | 540-543 | `workInProgressTransitions` global + `getWorkInProgressTransitions()` |
+| WorkLoop.js | 746-770 | `addTransitionIncompleteCallbackToPendingTransition` — adds to pending callbacks |
+| WorkLoop.js | 2809, 2961 | `workInProgressTransitions = getTransitionsForLanes(root, lanes)` |
+| WorkLoop.js | 3925-3935 | Fix 1 location (clears `currentEndTime`) |
+| WorkLoop.js | 4545-4574 | Post-paint callback scheduling (path 2 for `processTransitionCallbacks`) |
+| WorkLoop.js | 4926-4933 | `flushPassiveEffectsImpl`: unmount then mount order |
+| WorkLoop.js | 4958-4976 | `flushPassiveEffectsImpl`: path 3 for `processTransitionCallbacks` (needs all 3 non-null) |
+| ReactFiberConfigDOM.js | 4600-4604 | DOM double rAF implementation of `requestPostPaintCallback` |
+| createReactNoop.js | 612-615 | ReactNoop synchronous `requestPostPaintCallback` |
+| ReactFiberLane.js | 1227-1254 | `getTransitionsForLanes` — looks up transitions by lane in `transitionLanesMap` |
+| ReactFiberLane.js | 1256-1272 | `clearTransitionsForLanes` — clears lane-to-transition association |
+| TracingMarkerComponent.js | 76-260 | `processTransitionCallbacks` — processes all callback types in fixed order |
+| TracingMarkerComponent.js | 368-416 | `pushRootMarkerInstance` — two modes: specific transitions vs all markers |
 | TracingMarkerComponent.js | 424-438 | `pushMarkerInstance` — TracingMarker pushes onto stack |
 | ReactFiberThrow.js | 476-482 | Sets `_interrupted` when `_transitions` exists and wakeable changes |
 

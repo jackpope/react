@@ -7,7 +7,6 @@ import SearchPage from './components/SearchPage';
 import ActivityPage from './components/ActivityPage';
 import CpuSuspensePage from './components/CpuSuspensePage';
 import TracingDashboard from './dashboard/TracingDashboard';
-import {clearCache} from './hooks/useSimulatedDelay';
 
 export default function App({eventEmitter}) {
   const [page, setPage] = useState('home');
@@ -23,7 +22,6 @@ export default function App({eventEmitter}) {
           : `navigate-to-${target}`,
       timestamp: performance.now(),
     });
-    clearCache();
     startTransition(
       () => {
         setPage(target);
