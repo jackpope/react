@@ -3085,4 +3085,112 @@ describe('FragmentRefs', () => {
     );
     expect(onMouseEnter).toHaveBeenCalledTimes(0);
   });
+
+  // @gate enableFragmentEventHandlers
+  it('Fragment with no host children — handler never fires', async () => {
+    const onClick = jest.fn();
+    function Empty() {
+      return null;
+    }
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={onClick}>
+          <Empty />
+        </Fragment>,
+      ),
+    );
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('Fragment event handlers work with portals', async () => {
+    const portalContainer = document.createElement('div');
+    document.body.appendChild(portalContainer);
+    const onClick = jest.fn();
+
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={onClick}>
+          {createPortal(<div id="portal-child">portal</div>, portalContainer)}
+        </Fragment>,
+      ),
+    );
+
+    portalContainer.querySelector('#portal-child').click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+
+    document.body.removeChild(portalContainer);
+  });
+
+  // @gate enableFragmentEventHandlers && enableFragmentRefs
+  it('Fragment event handlers coexist with Fragment ref', async () => {
+    const fragmentRef = React.createRef();
+    const onClick = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment ref={fragmentRef} onClick={onClick}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    expect(fragmentRef.current).not.toBe(null);
+    container.querySelector('#child').click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers && enableFragmentRefs
+  it('Fragment event handlers coexist with addEventListener', async () => {
+    const fragmentRef = React.createRef();
+    const syntheticClick = jest.fn();
+    const nativeClick = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment ref={fragmentRef} onClick={syntheticClick}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    fragmentRef.current.addEventListener('click', nativeClick);
+    container.querySelector('#child').click();
+
+    expect(nativeClick).toHaveBeenCalledTimes(1);
+    expect(syntheticClick).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('handler updates are reflected without remount', async () => {
+    const handlerA = jest.fn();
+    const handlerB = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+
+    await act(() =>
+      root.render(
+        <Fragment onClick={handlerA}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(handlerA).toHaveBeenCalledTimes(1);
+    expect(handlerB).toHaveBeenCalledTimes(0);
+
+    await act(() =>
+      root.render(
+        <Fragment onClick={handlerB}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(handlerA).toHaveBeenCalledTimes(1);
+    expect(handlerB).toHaveBeenCalledTimes(1);
+  });
 });

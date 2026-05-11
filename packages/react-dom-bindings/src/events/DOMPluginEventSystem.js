@@ -699,6 +699,26 @@ export function dispatchEventForPluginEventSystem(
   );
 }
 
+// The fiber stored on a child DOM node may be the alternate (stale)
+// fiber after a re-render. When walking up return pointers, we may
+// encounter a Fragment fiber that is also the alternate. Unlike
+// HostComponents which store current props on the DOM node (updated
+// during commit via updateFiberProps), Fragment fibers have no DOM
+// node. We resolve to the current fiber by reading the _fragmentFiber
+// reference on the FragmentInstance stateNode, which is kept up to
+// date during commit.
+function getFragmentCurrentProps(
+  instance: Fiber,
+  stateNode: mixed,
+): Object | null {
+  // $FlowFixMe[prop-missing]
+  const currentFiber = stateNode && stateNode._fragmentFiber;
+  if (currentFiber != null) {
+    return currentFiber.memoizedProps;
+  }
+  return instance.memoizedProps;
+}
+
 function createDispatchListener(
   instance: null | Fiber,
   listener: Function,
@@ -802,7 +822,7 @@ export function accumulateSinglePhaseListeners(
       stateNode !== null
     ) {
       if (reactEventName !== null) {
-        const fragmentProps = instance.memoizedProps;
+        const fragmentProps = getFragmentCurrentProps(instance, stateNode);
         if (fragmentProps !== null) {
           const listener = fragmentProps[reactEventName];
           if (listener != null) {
@@ -886,7 +906,7 @@ export function accumulateTwoPhaseListeners(
       stateNode !== null
     ) {
       const currentTarget = stateNode;
-      const fragmentProps = instance.memoizedProps;
+      const fragmentProps = getFragmentCurrentProps(instance, stateNode);
       if (fragmentProps !== null) {
         const captureListener = fragmentProps[captureName];
         if (captureListener != null) {
@@ -983,15 +1003,16 @@ function accumulateEnterLeaveListenersForEvent(
       stateNode !== null
     ) {
       const currentTarget = stateNode;
+      const fragmentProps = getFragmentCurrentProps(instance, stateNode);
       if (inCapturePhase) {
-        const captureListener = instance.memoizedProps?.[registrationName];
+        const captureListener = fragmentProps?.[registrationName];
         if (captureListener != null) {
           listeners.unshift(
             createDispatchListener(instance, captureListener, currentTarget),
           );
         }
       } else if (!inCapturePhase) {
-        const bubbleListener = instance.memoizedProps?.[registrationName];
+        const bubbleListener = fragmentProps?.[registrationName];
         if (bubbleListener != null) {
           listeners.push(
             createDispatchListener(instance, bubbleListener, currentTarget),

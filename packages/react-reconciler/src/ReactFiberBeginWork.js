@@ -1362,6 +1362,10 @@ function updateFragment(
     if (fragmentHasEventHandlers(workInProgress.pendingProps)) {
       if (current === null || current.stateNode === null) {
         workInProgress.flags |= Ref | RefStatic;
+      } else if (current.stateNode !== null) {
+        // Ensure the FragmentInstance's fiber reference is updated during
+        // commit so event dispatch reads current props.
+        workInProgress.flags |= Update;
       }
     }
   }
