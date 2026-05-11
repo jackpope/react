@@ -2861,4 +2861,135 @@ describe('FragmentRefs', () => {
     const child = container.querySelector('#child');
     expect(child).not.toBe(null);
   });
+
+  // @gate enableFragmentEventHandlers
+  it('fires onClick on Fragment during bubble phase', async () => {
+    const onClick = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={onClick}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    const child = container.querySelector('#child');
+    child.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('fires handlers in correct bubble order with child handlers', async () => {
+    const order = [];
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={() => order.push('fragment')}>
+          <div id="child" onClick={() => order.push('child')}>
+            child
+          </div>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(order).toEqual(['child', 'fragment']);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('fires capture handlers in correct order', async () => {
+    const order = [];
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClickCapture={() => order.push('fragment-capture')}>
+          <div
+            id="child"
+            onClickCapture={() => order.push('child-capture')}>
+            child
+          </div>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(order).toEqual(['fragment-capture', 'child-capture']);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('stopPropagation in child prevents Fragment handler from firing', async () => {
+    const fragmentClick = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={fragmentClick}>
+          <div id="child" onClick={e => e.stopPropagation()}>
+            child
+          </div>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(fragmentClick).not.toHaveBeenCalled();
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('stopPropagation in Fragment prevents parent handler from firing', async () => {
+    const parentClick = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div onClick={parentClick}>
+          <Fragment onClick={e => e.stopPropagation()}>
+            <div id="child">child</div>
+          </Fragment>
+        </div>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(parentClick).not.toHaveBeenCalled();
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('nested Fragments fire in correct order', async () => {
+    const order = [];
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={() => order.push('outer')}>
+          <Fragment onClick={() => order.push('inner')}>
+            <div id="child" onClick={() => order.push('child')}>
+              child
+            </div>
+          </Fragment>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(order).toEqual(['child', 'inner', 'outer']);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('sets currentTarget to FragmentInstance', async () => {
+    let currentTarget = null;
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment
+          onClick={e => {
+            currentTarget = e.currentTarget;
+          }}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    container.querySelector('#child').click();
+    expect(currentTarget).not.toBe(null);
+    expect(currentTarget instanceof HTMLElement).toBe(false);
+  });
 });

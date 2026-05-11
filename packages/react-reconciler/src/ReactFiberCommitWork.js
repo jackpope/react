@@ -59,6 +59,7 @@ import {
   enableComponentPerformanceTrack,
   enableViewTransition,
   enableFragmentRefs,
+  enableFragmentEventHandlers,
   enableEagerAlternateStateNodeCleanup,
   enableDefaultTransitionIndicator,
   enableFragmentRefsTextNodes,
@@ -183,6 +184,7 @@ import {
   restoreRootViewTransitionName,
   isSingletonScope,
   updateFragmentInstanceFiber,
+  createFragmentInstance,
 } from './ReactFiberConfig';
 import {
   captureCommitPhaseError,
@@ -859,6 +861,14 @@ function commitLayoutEffectOnFiber(
         if (flags & Ref) {
           safelyAttachRef(finishedWork, finishedWork.return);
         }
+      }
+      if (
+        enableFragmentEventHandlers &&
+        finishedWork.ref === null &&
+        flags & Ref &&
+        finishedWork.stateNode === null
+      ) {
+        finishedWork.stateNode = createFragmentInstance(finishedWork);
       }
     // Fallthrough
     default: {

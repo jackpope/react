@@ -229,6 +229,21 @@ if (__DEV__) {
   };
 }
 
+function fragmentHasEventHandlers(props: Object): boolean {
+  for (const key in props) {
+    if (
+      key.length > 2 &&
+      key.charCodeAt(0) === /* o */ 111 &&
+      key.charCodeAt(1) === /* n */ 110 &&
+      key.charCodeAt(2) >= /* A */ 65 &&
+      key.charCodeAt(2) <= /* Z */ 90
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Given a fragment, validate that it can only be provided with fragment props
 // We do this here instead of BeginWork because the Fragment fiber doesn't have
 // the whole props object, only the children and is shared with arrays.
@@ -1894,7 +1909,10 @@ function createChildReconciler(
       newChild !== null &&
       newChild.type === REACT_FRAGMENT_TYPE &&
       newChild.key === null &&
-      (enableFragmentRefs ? newChild.props.ref === undefined : true);
+      (enableFragmentRefs ? newChild.props.ref === undefined : true) &&
+      (enableFragmentEventHandlers
+        ? !fragmentHasEventHandlers(newChild.props)
+        : true);
 
     if (isUnkeyedUnrefedTopLevelFragment) {
       validateFragmentProps(newChild, null, returnFiber);

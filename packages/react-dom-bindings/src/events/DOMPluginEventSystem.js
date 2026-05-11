@@ -35,6 +35,7 @@ import {
   HostSingleton,
   HostText,
   ScopeComponent,
+  Fragment,
 } from 'react-reconciler/src/ReactWorkTags';
 import {getLowestCommonAncestor} from 'react-reconciler/src/ReactFiberTreeReflection';
 
@@ -55,6 +56,7 @@ import {
   enableScopeAPI,
   disableCommentsAsDOMContainers,
   enableScrollEndPolyfill,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import {createEventListenerWrapperWithPriority} from './ReactDOMEventListener';
 import {
@@ -793,6 +795,22 @@ export function accumulateSinglePhaseListeners(
             );
           }
         });
+      }
+    } else if (
+      enableFragmentEventHandlers &&
+      tag === Fragment &&
+      stateNode !== null
+    ) {
+      if (reactEventName !== null) {
+        const fragmentProps = instance.memoizedProps;
+        if (fragmentProps !== null) {
+          const listener = fragmentProps[reactEventName];
+          if (listener != null) {
+            listeners.push(
+              createDispatchListener(instance, listener, stateNode),
+            );
+          }
+        }
       }
     }
     // If we are only accumulating events for the target, then we don't
