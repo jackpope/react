@@ -924,7 +924,12 @@ function getParent(inst: Fiber | null): Fiber | null {
     // events to their parent. We could also go through parentNode on the
     // host node but that wouldn't work for React Native and doesn't let us
     // do the portal feature.
-  } while (inst && inst.tag !== HostComponent && inst.tag !== HostSingleton);
+  } while (
+    inst &&
+    inst.tag !== HostComponent &&
+    inst.tag !== HostSingleton &&
+    !(enableFragmentEventHandlers && inst.tag === Fragment && inst.stateNode !== null)
+  );
   if (inst) {
     return inst;
   }
@@ -966,6 +971,27 @@ function accumulateEnterLeaveListenersForEvent(
         }
       } else if (!inCapturePhase) {
         const bubbleListener = getListener(instance, registrationName);
+        if (bubbleListener != null) {
+          listeners.push(
+            createDispatchListener(instance, bubbleListener, currentTarget),
+          );
+        }
+      }
+    } else if (
+      enableFragmentEventHandlers &&
+      tag === Fragment &&
+      stateNode !== null
+    ) {
+      const currentTarget = stateNode;
+      if (inCapturePhase) {
+        const captureListener = instance.memoizedProps?.[registrationName];
+        if (captureListener != null) {
+          listeners.unshift(
+            createDispatchListener(instance, captureListener, currentTarget),
+          );
+        }
+      } else if (!inCapturePhase) {
+        const bubbleListener = instance.memoizedProps?.[registrationName];
         if (bubbleListener != null) {
           listeners.push(
             createDispatchListener(instance, bubbleListener, currentTarget),

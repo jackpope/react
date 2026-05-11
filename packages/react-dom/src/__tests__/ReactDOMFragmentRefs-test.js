@@ -3016,4 +3016,73 @@ describe('FragmentRefs', () => {
     input.dispatchEvent(new Event('input', {bubbles: true}));
     expect(onChange).toHaveBeenCalledTimes(1);
   });
+
+  // @gate enableFragmentEventHandlers
+  it('fires onMouseEnter on Fragment when entering from outside', async () => {
+    const onMouseEnter = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onMouseEnter={onMouseEnter}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+
+    const child = container.querySelector('#child');
+    child.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+    expect(onMouseEnter).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('does not fire onMouseEnter when moving between Fragment children', async () => {
+    const onMouseEnter = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onMouseEnter={onMouseEnter}>
+          <div id="a">A</div>
+          <div id="b">B</div>
+        </Fragment>,
+      ),
+    );
+
+    const a = container.querySelector('#a');
+    const b = container.querySelector('#b');
+
+    // Enter from outside
+    a.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+    expect(onMouseEnter).toHaveBeenCalledTimes(1);
+
+    onMouseEnter.mockClear();
+
+    // Move from A to B — dispatch mouseout from A, then mouseover on B
+    a.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: b,
+      }),
+    );
+    b.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: a,
+      }),
+    );
+    expect(onMouseEnter).toHaveBeenCalledTimes(0);
+  });
 });
