@@ -1332,6 +1332,21 @@ function updateTracingMarkerComponent(
   return workInProgress.child;
 }
 
+function fragmentHasEventHandlers(props: Object): boolean {
+  for (const key in props) {
+    if (
+      key.length > 2 &&
+      key.charCodeAt(0) === /* o */ 111 &&
+      key.charCodeAt(1) === /* n */ 110 &&
+      key.charCodeAt(2) >= /* A */ 65 &&
+      key.charCodeAt(2) <= /* Z */ 90
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function updateFragment(
   current: Fiber | null,
   workInProgress: Fiber,
@@ -1342,6 +1357,13 @@ function updateFragment(
     : workInProgress.pendingProps;
   if (enableFragmentRefs) {
     markRef(current, workInProgress);
+  }
+  if (enableFragmentEventHandlers) {
+    if (fragmentHasEventHandlers(workInProgress.pendingProps)) {
+      if (current === null || current.stateNode === null) {
+        workInProgress.flags |= Ref | RefStatic;
+      }
+    }
   }
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;

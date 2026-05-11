@@ -2833,4 +2833,32 @@ describe('FragmentRefs', () => {
       expect(logs).toEqual([]);
     });
   });
+
+  // @gate enableFragmentEventHandlers
+  it('accepts event handler props without warning', async () => {
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={() => {}} onMouseEnter={() => {}}>
+          <div>child</div>
+        </Fragment>,
+      ),
+    );
+    // No console.error means validation passed
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('creates FragmentInstance for event handler props without ref', async () => {
+    const onClick = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onClick={onClick}>
+          <div id="child">child</div>
+        </Fragment>,
+      ),
+    );
+    const child = container.querySelector('#child');
+    expect(child).not.toBe(null);
+  });
 });

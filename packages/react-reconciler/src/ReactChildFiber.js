@@ -244,7 +244,16 @@ function validateFragmentProps(
       if (
         key !== 'children' &&
         key !== 'key' &&
-        (enableFragmentRefs ? key !== 'ref' : true)
+        (enableFragmentRefs ? key !== 'ref' : true) &&
+        (enableFragmentEventHandlers
+          ? !(
+              key.length > 2 &&
+              key[0] === 'o' &&
+              key[1] === 'n' &&
+              key.charCodeAt(2) >= /* A */ 65 &&
+              key.charCodeAt(2) <= /* Z */ 90
+            )
+          : true)
       ) {
         if (fiber === null) {
           // For unkeyed root fragments without refs (enableFragmentRefs),
@@ -258,7 +267,13 @@ function validateFragmentProps(
         runWithFiberInDEV(
           fiber,
           erroredKey => {
-            if (enableFragmentRefs) {
+            if (enableFragmentEventHandlers) {
+              console.error(
+                'Invalid prop `%s` supplied to `React.Fragment`. ' +
+                  'React.Fragment can only have `key`, `ref`, `children`, and event handler props.',
+                erroredKey,
+              );
+            } else if (enableFragmentRefs) {
               console.error(
                 'Invalid prop `%s` supplied to `React.Fragment`. ' +
                   'React.Fragment can only have `key`, `ref`, and `children` props.',
