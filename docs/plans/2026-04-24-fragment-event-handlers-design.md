@@ -107,6 +107,8 @@ Both `fragmentInstance.addEventListener()` and declarative `on*` props work inde
 
 **Implicit fragments.** A component returning an array (`return [<A />, <B />]`) creates an implicit Fragment with no element, so there's no place to put event handler props. This only works with explicit `<Fragment>` syntax.
 
+**Fragment unwrapping.** React has an optimization that "unwraps" unkeyed, unrefed top-level Fragments — treating `<Fragment><A /><B /></Fragment>` as if the children were returned directly, with no Fragment fiber in the tree. When event handler props are present, this unwrapping must be skipped so a Fragment fiber exists for the event dispatch walk to encounter.
+
 **Portals.** If a Fragment contains a Portal, events from portal children don't bubble through the Fragment in the DOM tree. React's synthetic event system already handles this correctly for regular components (synthetic bubbling follows the React tree, not the DOM tree), so Fragment handlers will receive events from portal children — matching the existing behavior for `<div>` parents.
 
 **Nested Fragments.** `<Fragment onClick={outer}><Fragment onClick={inner}>...</Fragment></Fragment>` — inner fires first during bubble, outer fires second. This is correct and matches what would happen with nested divs, though it's novel since there are no actual DOM boundaries between them.
@@ -116,3 +118,11 @@ Both `fragmentInstance.addEventListener()` and declarative `on*` props work inde
 ## Feature Flag
 
 `enableFragmentEventHandlers`, independent of `enableFragmentRefs`. The plumbing involves passing the full props object through Fragment fiber creation (today only `children` is passed) and adding a Fragment branch to the synthetic event dispatch path.
+
+## Implementation Notes
+
+**Prop resolution during dispatch.** The fiber encountered during the event dispatch tree walk may be the alternate (stale) fiber after a re-render. Host components avoid this because their props are stored on the DOM node and updated during commit via `updateFiberProps`. Fragment fibers have no DOM node, so we resolve current props through `FragmentInstance._fragmentFiber.memoizedProps`, where `_fragmentFiber` is kept pointing to the committed fiber during the commit phase.
+
+**Commit phase work on updates.** When event handler props change between renders, commit work is needed — not for the handlers themselves, but to update the `_fragmentFiber` reference on the FragmentInstance. The `Update` flag is set when a Fragment already has a stateNode and has event handlers, ensuring the commit phase visits the Fragment to keep the fiber reference current.
+
+**FragmentInstance creation without ref.** The existing ref-attach path (`safelyAttachRef` in `commitAttachRef`) only runs when a ref is present. A separate code path in `commitLayoutEffectOnFiber` creates the FragmentInstance when the `Ref` flag was scheduled for event handlers but `ref` is null.
