@@ -45,6 +45,7 @@ import {
   enableViewTransition,
   enableSuspenseyImages,
   enableOptimisticKey,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import {NoFlags, Placement, StaticMask} from './ReactFiberFlags';
 import {ConcurrentRoot} from './ReactRootTags';
@@ -603,7 +604,12 @@ export function createFiberFromTypeAndProps(
       case REACT_ACTIVITY_TYPE:
         return createFiberFromActivity(pendingProps, mode, lanes, key);
       case REACT_FRAGMENT_TYPE:
-        return createFiberFromFragment(pendingProps.children, mode, lanes, key);
+        return createFiberFromFragment(
+          enableFragmentEventHandlers ? pendingProps : pendingProps.children,
+          mode,
+          lanes,
+          key,
+        );
       case REACT_STRICT_MODE_TYPE:
         fiberTag = Mode;
         mode |= StrictLegacyMode;

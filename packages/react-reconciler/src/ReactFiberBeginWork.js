@@ -120,6 +120,7 @@ import {
   disableLegacyMode,
   enableViewTransition,
   enableFragmentRefs,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import shallowEqual from 'shared/shallowEqual';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
@@ -1336,7 +1337,9 @@ function updateFragment(
   workInProgress: Fiber,
   renderLanes: Lanes,
 ) {
-  const nextChildren = workInProgress.pendingProps;
+  const nextChildren = enableFragmentEventHandlers
+    ? workInProgress.pendingProps.children
+    : workInProgress.pendingProps;
   if (enableFragmentRefs) {
     markRef(current, workInProgress);
   }

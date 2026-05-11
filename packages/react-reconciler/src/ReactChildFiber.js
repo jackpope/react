@@ -53,6 +53,7 @@ import {
   enableAsyncIterableChildren,
   disableLegacyMode,
   enableFragmentRefs,
+  enableFragmentEventHandlers,
   enableOptimisticKey,
 } from 'shared/ReactFeatureFlags';
 
@@ -586,7 +587,9 @@ function createChildReconciler(
       const updated = updateFragment(
         returnFiber,
         current,
-        element.props.children,
+        enableFragmentEventHandlers
+          ? element.props
+          : element.props.children,
         lanes,
         element.key,
       );
@@ -1714,7 +1717,12 @@ function createChildReconciler(
         if (elementType === REACT_FRAGMENT_TYPE) {
           if (child.tag === Fragment) {
             deleteRemainingChildren(returnFiber, child.sibling);
-            const existing = useFiber(child, element.props.children);
+            const existing = useFiber(
+              child,
+              enableFragmentEventHandlers
+                ? element.props
+                : element.props.children,
+            );
             if (enableOptimisticKey) {
               // If the old key was optimistic we need to now save the real one.
               existing.key = key;
@@ -1772,7 +1780,9 @@ function createChildReconciler(
 
     if (element.type === REACT_FRAGMENT_TYPE) {
       const created = createFiberFromFragment(
-        element.props.children,
+        enableFragmentEventHandlers
+          ? element.props
+          : element.props.children,
         returnFiber.mode,
         lanes,
         element.key,
