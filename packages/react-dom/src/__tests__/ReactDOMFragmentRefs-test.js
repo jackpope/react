@@ -2992,4 +2992,28 @@ describe('FragmentRefs', () => {
     expect(currentTarget).not.toBe(null);
     expect(currentTarget instanceof HTMLElement).toBe(false);
   });
+
+  // @gate enableFragmentEventHandlers
+  it('fires onChange on Fragment (two-phase dispatch)', async () => {
+    const onChange = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <Fragment onChange={onChange}>
+          <input id="input" />
+        </Fragment>,
+      ),
+    );
+
+    const input = container.querySelector('#input');
+    // Simulate a change event by setting value via native setter
+    // to bypass React's value tracker, then dispatching input event
+    const setUntrackedValue = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      'value',
+    ).set;
+    setUntrackedValue.call(input, 'hello');
+    input.dispatchEvent(new Event('input', {bubbles: true}));
+    expect(onChange).toHaveBeenCalledTimes(1);
+  });
 });

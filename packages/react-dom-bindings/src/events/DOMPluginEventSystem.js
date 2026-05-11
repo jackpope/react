@@ -880,6 +880,27 @@ export function accumulateTwoPhaseListeners(
           createDispatchListener(instance, bubbleListener, currentTarget),
         );
       }
+    } else if (
+      enableFragmentEventHandlers &&
+      tag === Fragment &&
+      stateNode !== null
+    ) {
+      const currentTarget = stateNode;
+      const fragmentProps = instance.memoizedProps;
+      if (fragmentProps !== null) {
+        const captureListener = fragmentProps[captureName];
+        if (captureListener != null) {
+          listeners.unshift(
+            createDispatchListener(instance, captureListener, currentTarget),
+          );
+        }
+        const bubbleListener = fragmentProps[reactName];
+        if (bubbleListener != null) {
+          listeners.push(
+            createDispatchListener(instance, bubbleListener, currentTarget),
+          );
+        }
+      }
     }
     if (instance.tag === HostRoot) {
       return listeners;
