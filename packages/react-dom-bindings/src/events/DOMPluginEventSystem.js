@@ -1008,19 +1008,21 @@ function accumulateEnterLeaveListenersForEvent(
     ) {
       const currentTarget = stateNode;
       const fragmentProps = getFragmentCurrentProps(instance, stateNode);
-      if (inCapturePhase) {
-        const captureListener = fragmentProps?.[registrationName];
-        if (captureListener != null) {
-          listeners.unshift(
-            createDispatchListener(instance, captureListener, currentTarget),
-          );
-        }
-      } else if (!inCapturePhase) {
-        const bubbleListener = fragmentProps?.[registrationName];
-        if (bubbleListener != null) {
-          listeners.push(
-            createDispatchListener(instance, bubbleListener, currentTarget),
-          );
+      if (fragmentProps !== null) {
+        if (inCapturePhase) {
+          const captureListener = fragmentProps[registrationName];
+          if (captureListener != null) {
+            listeners.unshift(
+              createDispatchListener(instance, captureListener, currentTarget),
+            );
+          }
+        } else if (!inCapturePhase) {
+          const bubbleListener = fragmentProps[registrationName];
+          if (bubbleListener != null) {
+            listeners.push(
+              createDispatchListener(instance, bubbleListener, currentTarget),
+            );
+          }
         }
       }
     }
