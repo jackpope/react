@@ -26,4 +26,5 @@ export const enableFragmentRefsScrollIntoView = __VARIANT__;
 export const enableFragmentRefsInstanceHandles = __VARIANT__;
 export const enableEffectEventMutationPhase = __VARIANT__;
 export const enableFragmentRefsTextNodes = __VARIANT__;
+export const enableFragmentEventHandlers = __VARIANT__;
 export const enableViewTransitionForPersistenceMode = __VARIANT__;

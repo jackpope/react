@@ -74,6 +74,7 @@ export const enableFragmentRefs: boolean = true;
 export const enableFragmentRefsScrollIntoView: boolean = false;
 export const enableFragmentRefsInstanceHandles: boolean = true;
 export const enableFragmentRefsTextNodes: boolean = true;
+export const enableFragmentEventHandlers: boolean = false;
 
 export const enableInternalInstanceMap: boolean = false;
 

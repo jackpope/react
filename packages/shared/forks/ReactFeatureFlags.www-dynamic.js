@@ -36,6 +36,7 @@ export const enableScrollEndPolyfill: boolean = __VARIANT__;
 export const enableFragmentRefs: boolean = __VARIANT__;
 export const enableFragmentRefsScrollIntoView: boolean = __VARIANT__;
 export const enableFragmentRefsTextNodes: boolean = __VARIANT__;
+export const enableFragmentEventHandlers: boolean = __VARIANT__;
 export const enableInternalInstanceMap: boolean = __VARIANT__;
 export const enableParallelTransitions: boolean = __VARIANT__;
 
