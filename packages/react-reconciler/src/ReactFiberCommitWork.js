@@ -870,10 +870,7 @@ function commitLayoutEffectOnFiber(
       ) {
         finishedWork.stateNode = createFragmentInstance(finishedWork);
       }
-      if (
-        enableFragmentEventHandlers &&
-        finishedWork.stateNode !== null
-      ) {
+      if (enableFragmentEventHandlers && finishedWork.stateNode !== null) {
         // Keep the FragmentInstance's fiber reference up to date with the
         // current (committed) fiber so event dispatch reads current props.
         finishedWork.stateNode._fragmentFiber = finishedWork;

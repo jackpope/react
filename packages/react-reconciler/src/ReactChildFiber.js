@@ -617,9 +617,7 @@ function createChildReconciler(
       const updated = updateFragment(
         returnFiber,
         current,
-        enableFragmentEventHandlers
-          ? element.props
-          : element.props.children,
+        enableFragmentEventHandlers ? element.props : element.props.children,
         lanes,
         element.key,
       );
@@ -1810,9 +1808,7 @@ function createChildReconciler(
 
     if (element.type === REACT_FRAGMENT_TYPE) {
       const created = createFiberFromFragment(
-        enableFragmentEventHandlers
-          ? element.props
-          : element.props.children,
+        enableFragmentEventHandlers ? element.props : element.props.children,
         returnFiber.mode,
         lanes,
         element.key,

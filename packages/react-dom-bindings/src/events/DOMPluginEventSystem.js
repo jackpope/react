@@ -948,7 +948,11 @@ function getParent(inst: Fiber | null): Fiber | null {
     inst &&
     inst.tag !== HostComponent &&
     inst.tag !== HostSingleton &&
-    !(enableFragmentEventHandlers && inst.tag === Fragment && inst.stateNode !== null)
+    !(
+      enableFragmentEventHandlers &&
+      inst.tag === Fragment &&
+      inst.stateNode !== null
+    )
   );
   if (inst) {
     return inst;

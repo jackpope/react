@@ -2904,9 +2904,7 @@ describe('FragmentRefs', () => {
     await act(() =>
       root.render(
         <Fragment onClickCapture={() => order.push('fragment-capture')}>
-          <div
-            id="child"
-            onClickCapture={() => order.push('child-capture')}>
+          <div id="child" onClickCapture={() => order.push('child-capture')}>
             child
           </div>
         </Fragment>,
