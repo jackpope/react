@@ -1,71 +1,50 @@
 # RCP: Fragment Event Handler Props
 
-## Problem
-
-Fragment refs let you get a handle on a group of DOM elements without adding a wrapper div. But there's an awkward gap: once you have that handle, the only way to listen for events is `fragmentInstance.addEventListener()`, which adds native DOM listeners. That creates a fundamental mismatch with React's synthetic event system.
-
-The immediate, concrete problem: native `stopPropagation()` kills React's delegated event dispatch. If a Fragment's native listener calls `stopPropagation()`, the event never reaches React's root-level listener, so _all_ synthetic handlers — including the Fragment's own children — stop working.
+There's a gap in composability with Fragment Ref events (`FragmentInstance#addEventListener`) and the common onX prop handler syntax. With our synthetic event system, composability is a bit unexpected in some cases.
 
 ```jsx
-function Toolbar({onAction}) {
-  const ref = useRef(null);
-
-  useEffect(() => {
-    // Native listener on the Fragment
-    ref.current.addEventListener('click', (e) => {
-      logAnalytics('toolbar-click');
-      e.stopPropagation(); // Prevent clicks from bubbling past the toolbar
-    });
-  });
-
+function Component() {
   return (
-    <Fragment ref={ref}>
-      {/* This onClick will NEVER fire — stopPropagation blocked it
-          from reaching React's root-level delegated listener */}
-      <button onClick={onAction}>Do thing</button>
-    </Fragment>
-  );
+    <div onClick={parentDivHandler}>
+      <Fragment ref={
+        instance => {
+          instance.addEventListener('click', fragmentHandler);
+          return () => instance.removeEventListener('click', fragmentHandler);
+        }
+      }>
+        <div onClick={childDivHandler}>
+      </Fragment>
+    </div>
+  )
 }
 ```
 
-This is surprising. On a `<div>`, calling `stopPropagation` in a native listener doesn't block the div's own children's React handlers — because the event already passed through React's delegation point. But Fragment listeners sit _on_ the child DOM nodes, so stopPropagation blocks everything downstream.
+When clicking the `div`, the order will be:
 
-## Beyond stopPropagation
+- `fragmentHandler`: Native event listener. Fires during DOM-level bubbling before the event reaches React's root delegation point
+- `childDivHandler`: Synthetic event. Bubbles as target
+- `parentDivHandler`: Synthetic event. Bubbles as parent
 
-The stopPropagation bug is the sharp edge, but the broader issue is that there's no way to declaratively handle events at the Fragment level. This matters for several patterns:
+This is unexpected for most users as the `<Fragment />` is designed as a psuedo parent/group element but doesn't adhere to event ordering. And there is a real composability miss here because you can't use Fragment events as boundaries.
 
-**Layout-sensitive grouping.** The most common workaround for "handle events on a group of children" is to wrap in a `<div>`. But that changes the DOM structure, which breaks flexbox/grid layout, table structure, and CSS selectors that depend on parent-child relationships.
+For example, this doesn't work:
 
 ```jsx
-// Breaks grid layout — the div becomes a single grid item
-// instead of each child being its own grid item
-<div className="grid">
-  <div onClick={handleGroupClick}> {/* extra wrapper */}
-    <GridItem />
-    <GridItem />
-    <GridItem />
-  </div>
-</div>
+function StopPropagationBoundary({children}) {
+  return <Fragment ref={instance => instance.addEventListener('click', e => e.stopPropagation)}>{children}</Fragment>
+}
 
-// With Fragment event handlers, layout is preserved
-<div className="grid">
-  <Fragment onClick={handleGroupClick}>
-    <GridItem />
-    <GridItem />
-    <GridItem />
-  </Fragment>
-</div>
+function Component() {
+  <StopPropagationBoundary>
+    <div onClick={doSomething} />
+  </StopPropagationBoundary>
+}
 ```
-
-**Keyboard navigation groups.** Patterns like toolbars and menubars need keyboard event handling at the group level (for arrow key navigation between items). Today this requires a wrapper element, which adds noise to the accessibility tree.
-
-**Consistent mental model.** Fragments already accept `ref` and `key`. If you can get a ref to a Fragment, it's natural to also put `onClick` on it — the same way you would on a `<div>`. The gap between "I can get a ref" and "I can't put event handlers on it" is confusing.
-
-**Composition.** `cloneElement` can inject handlers into each child, but it's fragile, doesn't compose well, and doesn't work with children that don't forward event handler props.
+This would be a useful utility, but instead it breaks the child's event handling completely by stopping propagation _before_ `doSomething` is reached.
 
 ## Proposal
 
-Let Fragments accept synthetic event handler props — `onClick`, `onMouseDown`, `onKeyDown`, etc. — the same ones you'd put on a DOM element.
+Add `onX` syntheic event handler props to Fragment.
 
 ```jsx
 <Fragment onClick={(e) => console.log('clicked', e.currentTarget)}>
@@ -74,55 +53,106 @@ Let Fragments accept synthetic event handler props — `onClick`, `onMouseDown`,
 </Fragment>
 ```
 
-Fragment handlers participate in React's synthetic event dispatch. They fire during the bubble phase (after children), just like a parent `<div>` would. Capture variants (`onClickCapture`) fire before children, also like a `<div>`.
+Fragment handlers participate in React's synthetic event dispatch. They fire during the bubble phase, just like a parent `<div>` would. Capture variants fire before children, also like a `<div>`.
 
 ```jsx
 // stopPropagation at the Fragment level works correctly
 <Fragment onClick={(e) => {
   e.stopPropagation(); // prevents bubbling past the Fragment
 }}>
-  <button onClick={() => console.log('still fires')}>Click me</button>
+  <div onClick={() => console.log('still fires')}>Click me</div>
 </Fragment>
 ```
 
-A ref is not required — `<Fragment onClick={handler}>` works on its own. Under the hood, React creates a FragmentInstance when event handler props are present (same mechanism as Fragment refs).
+Defining a `ref` is not required. `<Fragment onClick={handler}>` works on its own. Though we may want to set the event's `currentTarget` to the `FragmentInstance`, so we would have to create the ref instance if a handler prop is present.
+
+### Stacking with child handlers
+
+Our first example would work as expected, refactored to use synthetic event handlers:
+
+```jsx
+function Component() {
+  return (
+    <div onClick={parentDivHandler}>
+      <Fragment onClick={fragmentHandler}>
+        <div onClick={childDivHandler}>
+      </Fragment>
+    </div>
+  )
+}
+```
+
+Now the order after clicking the child is:
+
+- `childDivHandler`: Synthetic event. Bubbles as target
+- `fragmentHandler`: Synthetic event. Bubbles as parent
+- `parentDivHandler`: Synthetic event. Bubbles as parent
+
+
+Nested Fragments stack the same way:
+
+```jsx
+<Fragment onClick={handlerC}>
+  <Fragment onClick={handlerB}>
+    <div onClick={handlerA} />
+  </Fragment>
+</Fragment>
+// Bubble: handlerA → handlerB → handlerC
+// Capture: handlerCCapture → handlerBCapture → handlerACapture
+```
 
 ### `event.currentTarget`
 
-When a Fragment's handler fires, `event.currentTarget` is the FragmentInstance, not a DOM element. This is a departure from the usual DOM convention, but it's consistent with how Fragment refs already work — if you have a ref to a Fragment, you get a FragmentInstance, not a DOM node.
+When a Fragment's handler fires, `event.currentTarget` is the FragmentInstance. Note this is different to how we handle `currentTarget` on native Fragment events. Since we forward the native event handlers to all top-level host children, the children are the `currentTarget` and there is no Fragment layer to bubble through.
 
-### Coexistence with addEventListener
+Conceptually `fragmentInstance.dispatchEvent()` should probably use itself as the currentTarget too. This would require some wrapping of the incoming event handler function.
 
-Both `fragmentInstance.addEventListener()` and declarative `on*` props work independently. Native listeners fire before synthetic ones, same as on a `<div>`. No warnings for using both.
+### Enter/Leave and Focus Events
 
-## Alternatives Considered
+The common-ancestor logic in `accumulateEnterLeaveListenersForEvent` handles the "moving between Fragment children" case correctly without special handling:
 
-**Fix addEventListener to use synthetic events.** We could make `fragmentInstance.addEventListener` dispatch through React's synthetic system instead of adding native listeners. This would fix the stopPropagation problem, but `addEventListener` is a well-known DOM API — people expect it to add native listeners. Changing that semantic would be more surprising than the original bug.
+- Mouse moves from child A to child B within the same Fragment: the Fragment is the common ancestor, so it sits on neither the `from` path nor the `to` path. Enter/leave handlers don't fire.
+- Mouse enters from outside into child A: the common ancestor is above the Fragment, so the Fragment is on the `to` path and `onMouseEnter` fires.
+- Mouse leaves from child B to outside: symmetric — `onMouseLeave` fires.
 
-**New wrapper component (e.g. `<Group>`).**  Instead of extending Fragment, create a new component specifically for "group with events." But Fragment already has grouping semantics and refs. Adding another component for the same concept but with events would be confusing — which one do you reach for?
+This matches wrapper div behavior without a DOM boundary.
 
-**Do nothing — just use a wrapper div.** This is the current workaround and it's fine for many cases. But it doesn't work when the wrapper div breaks layout, and the stopPropagation problem with addEventListener is a real bug that catches people.
+## Implementation Design
+
+We can implement this behind an independent feature flag to avoid blocking the release of Fragment Refs. If timing works out they can ship together but let's not add a new dependency this late.
+
+### FragmentInstance Creation
+
+The `Ref` effect flag is scheduled when event handler props are present (even without a ref), so that a `FragmentInstance` is created during commit. We use this to be the `currentTarget` for the event. We can also use the presence of a FragmentInstance as a sentinel to determine when to handle Fragment event props in `accumulateSinglePhaseListeners`.
+
+Even though we'll create a FragmentInstance, we can read the handlers directly from `memoizedProps` to avoid dealing with updates.
+
+### Commit Phase and FragmentInstance Lifecycle
+
+The commit phase work is minimal since handlers are not stored on the FragmentInstance.
+
+**Creation.** When a Fragment has event handler props (with or without a ref), the `Ref` effect flag is scheduled during `beginWork` or `completeWork`. During `commitAttachRef`, the existing Fragment case creates a `FragmentInstance` and assigns it to `fiber.stateNode`. No changes.
+
+**Updates.** When event handler props change between renders, no commit work is needed. The fiber's `memoizedProps` is updated by the reconciler as part of the normal render cycle.
+
+**Removal.** When a Fragment with event handlers unmounts, the existing ref detach path nulls out the `stateNode`. There are no stored handlers to tear down.
 
 ## Edge Cases
 
-**Implicit fragments.** A component returning an array (`return [<A />, <B />]`) creates an implicit Fragment with no element, so there's no place to put event handler props. This only works with explicit `<Fragment>` syntax.
+**Implicit fragments.** This only works with explicit `<Fragment>` syntax.
 
-**Fragment unwrapping.** React has an optimization that "unwraps" unkeyed, unrefed top-level Fragments — treating `<Fragment><A /><B /></Fragment>` as if the children were returned directly, with no Fragment fiber in the tree. When event handler props are present, this unwrapping must be skipped so a Fragment fiber exists for the event dispatch walk to encounter.
+**Fragments with no host children.** A Fragment rendering only other Fragments or null has no host children for events to originate from. Its handlers simply never fire. No error, no warning.
 
-**Portals.** If a Fragment contains a Portal, events from portal children don't bubble through the Fragment in the DOM tree. React's synthetic event system already handles this correctly for regular components (synthetic bubbling follows the React tree, not the DOM tree), so Fragment handlers will receive events from portal children — matching the existing behavior for `<div>` parents.
+**Portals.** If a Fragment contains a Portal, events from portal children bubble through the React tree (not the DOM tree). Fragment handlers receive events from portal descendants. This matches existing behavior for `<div>` parents.
 
-**Nested Fragments.** `<Fragment onClick={outer}><Fragment onClick={inner}>...</Fragment></Fragment>` — inner fires first during bubble, outer fires second. This is correct and matches what would happen with nested divs, though it's novel since there are no actual DOM boundaries between them.
+**`currentTarget` is not a DOM element.** Code that expects `e.currentTarget.getBoundingClientRect()` or other DOM methods will fail. The FragmentInstance API is more limited.
 
-**`currentTarget` is not a DOM element.** Code that expects `e.currentTarget.getBoundingClientRect()` or other DOM methods will fail. The FragmentInstance API is more limited — it provides methods for managing the group of children, not DOM layout queries. This is the same situation as Fragment refs today.
+**SSR.** Event handler props are ignored on the server, same as with host component event handlers.
 
-## Feature Flag
+**DevTools.** React DevTools already displays Fragment fibers. With the full props object as `pendingProps`, DevTools will show event handler props in the props panel.
 
-`enableFragmentEventHandlers`, independent of `enableFragmentRefs`. The plumbing involves passing the full props object through Fragment fiber creation (today only `children` is passed) and adding a Fragment branch to the synthetic event dispatch path.
+## Alternatives Considered
 
-## Implementation Notes
+Store event handlers on FragmentInstance. Instead of reading from `fiber.memoizedProps` at dispatch time, handlers could be stored on the FragmentInstance during commit. It requires an update mechanism to keep handlers in sync with prop changes, adding commit-phase complexity.
 
-**Prop resolution during dispatch.** The fiber encountered during the event dispatch tree walk may be the alternate (stale) fiber after a re-render. Host components avoid this because their props are stored on the DOM node and updated during commit via `updateFiberProps`. Fragment fibers have no DOM node, so we resolve current props through `FragmentInstance._fragmentFiber.memoizedProps`, where `_fragmentFiber` is kept pointing to the committed fiber during the commit phase.
-
-**Commit phase work on updates.** When event handler props change between renders, commit work is needed — not for the handlers themselves, but to update the `_fragmentFiber` reference on the FragmentInstance. The `Update` flag is set when a Fragment already has a stateNode and has event handlers, ensuring the commit phase visits the Fragment to keep the fiber reference current.
-
-**FragmentInstance creation without ref.** The existing ref-attach path (`safelyAttachRef` in `commitAttachRef`) only runs when a ref is present. A separate code path in `commitLayoutEffectOnFiber` creates the FragmentInstance when the `Ref` flag was scheduled for event handlers but `ref` is null.
+Use `Update` flag instead of `Ref` for FragmentInstance creation. Using the `Ref` flag for a case that doesn't expose a ref is unexpected. But we are creating the instance and that follows a consistent code path. Will have to look into the code paths to see if this would cause any issues or perf regressions.
