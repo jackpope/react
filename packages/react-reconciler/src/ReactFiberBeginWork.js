@@ -308,6 +308,7 @@ import {
 } from './ReactFiberTracingMarkerComponent';
 import {callComponentInDEV, callRenderInDEV} from './ReactFiberCallUserSpace';
 import {resolveLazy} from './ReactFiberThenable';
+import isArray from 'shared/isArray';
 
 // A special exception that's used to unwind the stack when an update flows
 // into a dehydrated boundary.
@@ -1352,14 +1353,19 @@ function updateFragment(
   workInProgress: Fiber,
   renderLanes: Lanes,
 ) {
+  const pendingProps = workInProgress.pendingProps;
+  // Implicit Fragment fibers (from nested arrays) store the raw array as
+  // pendingProps, while explicit Fragments store the full props object.
   const nextChildren = enableFragmentEventHandlers
-    ? workInProgress.pendingProps.children
-    : workInProgress.pendingProps;
+    ? isArray(pendingProps)
+      ? pendingProps
+      : pendingProps.children
+    : pendingProps;
   if (enableFragmentRefs) {
     markRef(current, workInProgress);
   }
   if (enableFragmentEventHandlers) {
-    if (fragmentHasEventHandlers(workInProgress.pendingProps)) {
+    if (!isArray(pendingProps) && fragmentHasEventHandlers(pendingProps)) {
       if (current === null || current.stateNode === null) {
         workInProgress.flags |= Ref | RefStatic;
       } else if (current.stateNode !== null) {

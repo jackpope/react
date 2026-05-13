@@ -489,6 +489,8 @@ export function updateFragmentInstanceFiber(
   // Noop
 }
 
+export function destroyFragmentInstance(instance: FragmentInstanceType): void {}
+
 export function commitNewChildToFragmentInstance(
   child: Instance,
   fragmentInstance: FragmentInstanceType,

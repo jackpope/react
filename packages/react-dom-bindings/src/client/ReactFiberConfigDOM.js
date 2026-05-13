@@ -131,6 +131,7 @@ import {
   enableProfilerTimer,
   enableFragmentRefsInstanceHandles,
   enableFragmentRefsTextNodes,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import {
   HostComponent,
@@ -2976,6 +2977,11 @@ export type FragmentInstanceType = {
   _fragmentFiber: Fiber,
   _eventListeners: null | Array<StoredEventListener>,
   _observers: null | Set<IntersectionObserver | ResizeObserver>,
+  _isMouseInside: boolean,
+  _suppressedLeaveCount: number,
+  _leavingFragment: boolean,
+  _cachedRect: null | {minX: number, minY: number, maxX: number, maxY: number},
+  _enterLeaveCleanup: null | (() => void),
   addEventListener(
     type: string,
     listener: EventListener,
@@ -2998,12 +3004,18 @@ export type FragmentInstanceType = {
   }): Document | ShadowRoot | FragmentInstanceType,
   compareDocumentPosition(otherNode: Instance): number,
   scrollIntoView(alignToTop?: boolean): void,
+  setMouseInside(value: boolean): void,
 };
 
 function FragmentInstance(this: FragmentInstanceType, fragmentFiber: Fiber) {
   this._fragmentFiber = fragmentFiber;
   this._eventListeners = null;
   this._observers = null;
+  this._isMouseInside = false;
+  this._suppressedLeaveCount = 0;
+  this._leavingFragment = false;
+  this._cachedRect = null;
+  this._enterLeaveCleanup = null;
 }
 
 // $FlowFixMe[prop-missing]
@@ -3562,6 +3574,231 @@ if (enableFragmentRefsScrollIntoView) {
   };
 }
 
+function computeFragmentBoundingRect(
+  fragmentInstance: FragmentInstanceType,
+): null | {minX: number, minY: number, maxX: number, maxY: number} {
+  const rects = fragmentInstance.getClientRects();
+  if (rects.length === 0) {
+    return null;
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const rect = rects[i];
+    if (rect.left < minX) minX = rect.left;
+    if (rect.top < minY) minY = rect.top;
+    if (rect.right > maxX) maxX = rect.right;
+    if (rect.bottom > maxY) maxY = rect.bottom;
+  }
+  return {minX, minY, maxX, maxY};
+}
+
+function pointInCachedRect(
+  rect: {minX: number, minY: number, maxX: number, maxY: number},
+  x: number,
+  y: number,
+): boolean {
+  return x >= rect.minX && x <= rect.maxX && y >= rect.minY && y <= rect.maxY;
+}
+
+// $FlowFixMe[prop-missing]
+FragmentInstance.prototype.setMouseInside = function (
+  this: FragmentInstanceType,
+  value: boolean,
+): void {
+  this._isMouseInside = value;
+  if (!value) {
+    this._cachedRect = null;
+    this._leavingFragment = true;
+  }
+};
+
+function attachEnterLeaveListeners(
+  fragmentInstance: FragmentInstanceType,
+): void {
+  if (fragmentInstance._enterLeaveCleanup !== null) {
+    return;
+  }
+
+  const parentHostFiber = getFragmentParentHostFiber(
+    fragmentInstance._fragmentFiber,
+  );
+  if (parentHostFiber === null) {
+    return;
+  }
+  const parentNode: Instance =
+    getInstanceFromHostFiber<Instance>(parentHostFiber);
+
+  // Checks if the cursor is inside the Fragment rect and fires
+  // onMouseEnter if transitioning from outside to inside. Called
+  // from both mouseover (initial entry) and mousemove (cursor
+  // moves from padding into the gap area within the Fragment rect).
+  function checkEnter(e: MouseEvent): void {
+    if (!fragmentInstance._cachedRect) {
+      fragmentInstance._cachedRect =
+        computeFragmentBoundingRect(fragmentInstance);
+    }
+    if (!fragmentInstance._cachedRect) {
+      return;
+    }
+    const inside = pointInCachedRect(
+      fragmentInstance._cachedRect,
+      e.clientX,
+      e.clientY,
+    );
+    if (inside && !fragmentInstance._isMouseInside) {
+      if (fragmentInstance._leavingFragment) {
+        return;
+      }
+      fragmentInstance._isMouseInside = true;
+      const props = fragmentInstance._fragmentFiber.memoizedProps;
+      if (props.onMouseEnter) {
+        const event: any = new MouseEvent('mouseenter', {
+          bubbles: false,
+          cancelable: false,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          screenX: e.screenX,
+          screenY: e.screenY,
+        });
+        Object.defineProperty(event, 'currentTarget', {
+          value: fragmentInstance,
+        });
+        props.onMouseEnter(event);
+      }
+    } else if (!inside && fragmentInstance._isMouseInside) {
+      fragmentInstance._isMouseInside = false;
+      fragmentInstance._cachedRect = null;
+      const props = fragmentInstance._fragmentFiber.memoizedProps;
+      if (props.onMouseLeave) {
+        const event: any = new MouseEvent('mouseleave', {
+          bubbles: false,
+          cancelable: false,
+          clientX: e.clientX,
+          clientY: e.clientY,
+          screenX: e.screenX,
+          screenY: e.screenY,
+        });
+        Object.defineProperty(event, 'currentTarget', {
+          value: fragmentInstance,
+        });
+        props.onMouseLeave(event);
+      }
+    }
+  }
+
+  const handleMouseEvent = function (e: MouseEvent) {
+    // Only handle events where the target is the parent element itself
+    // (i.e. the cursor is in the gap/padding between Fragment children).
+    // When the target is a child element, the accumulation path handles it.
+    if (e.target !== parentNode) {
+      return;
+    }
+    // On mouseover, check if the cursor entered from outside the parent.
+    // If so, clear the leaving state so checkEnter can fire.
+    // If the cursor came from a Fragment child (internal transition
+    // during exit), keep the leaving state to prevent spurious re-enter.
+    if (e.type === 'mouseover') {
+      const relatedTarget: any = e.relatedTarget;
+      if (relatedTarget == null || !parentNode.contains(relatedTarget)) {
+        fragmentInstance._leavingFragment = false;
+      }
+    }
+    checkEnter(e);
+  };
+
+  const handleMouseOut = function (e: MouseEvent) {
+    if (e.target !== parentNode) {
+      return;
+    }
+    if (!fragmentInstance._isMouseInside) {
+      return;
+    }
+    // Don't fire leave when moving to a Fragment child (including
+    // nested elements within a child). The accumulation path handles
+    // child-to-child transitions. We walk up the DOM from the
+    // relatedTarget checking the reactFragments handle set that is
+    // placed on each Fragment host child.
+    const relatedTarget: any = e.relatedTarget;
+    if (relatedTarget != null) {
+      let node = relatedTarget;
+      while (node != null && node !== parentNode) {
+        if (
+          node.reactFragments != null &&
+          node.reactFragments.has(fragmentInstance)
+        ) {
+          return;
+        }
+        node = node.parentNode;
+      }
+    }
+    fragmentInstance._isMouseInside = false;
+    fragmentInstance._cachedRect = null;
+    const props = fragmentInstance._fragmentFiber.memoizedProps;
+    if (props.onMouseLeave) {
+      const event: any = new MouseEvent('mouseleave', {
+        bubbles: false,
+        cancelable: false,
+        clientX: e.clientX,
+        clientY: e.clientY,
+        screenX: e.screenX,
+        screenY: e.screenY,
+      });
+      Object.defineProperty(event, 'currentTarget', {
+        value: fragmentInstance,
+      });
+      props.onMouseLeave(event);
+    }
+  };
+
+  const handleMouseLeave = function () {
+    if (fragmentInstance._isMouseInside) {
+      fragmentInstance._isMouseInside = false;
+      fragmentInstance._cachedRect = null;
+      fragmentInstance._suppressedLeaveCount = 0;
+      fragmentInstance._leavingFragment = false;
+      const props = fragmentInstance._fragmentFiber.memoizedProps;
+      if (props.onMouseLeave) {
+        const event: any = new MouseEvent('mouseleave', {
+          bubbles: false,
+          cancelable: false,
+        });
+        Object.defineProperty(event, 'currentTarget', {
+          value: fragmentInstance,
+        });
+        props.onMouseLeave(event);
+      }
+    }
+  };
+
+  parentNode.addEventListener('mouseover', handleMouseEvent);
+  parentNode.addEventListener('mousemove', handleMouseEvent);
+  parentNode.addEventListener('mouseout', handleMouseOut);
+  parentNode.addEventListener('mouseleave', handleMouseLeave);
+
+  fragmentInstance._enterLeaveCleanup = function () {
+    parentNode.removeEventListener('mouseover', handleMouseEvent);
+    parentNode.removeEventListener('mousemove', handleMouseEvent);
+    parentNode.removeEventListener('mouseout', handleMouseOut);
+    parentNode.removeEventListener('mouseleave', handleMouseLeave);
+  };
+}
+
+function detachEnterLeaveListeners(
+  fragmentInstance: FragmentInstanceType,
+): void {
+  if (fragmentInstance._enterLeaveCleanup !== null) {
+    fragmentInstance._enterLeaveCleanup();
+    fragmentInstance._enterLeaveCleanup = null;
+  }
+  fragmentInstance._isMouseInside = false;
+  fragmentInstance._leavingFragment = false;
+  fragmentInstance._suppressedLeaveCount = 0;
+  fragmentInstance._cachedRect = null;
+}
+
 function addFragmentHandleToFiber(
   child: Fiber,
   fragmentInstance: FragmentInstanceType,
@@ -3588,6 +3825,19 @@ function addFragmentHandleToInstance(
   }
 }
 
+function fragmentHasEnterLeaveHandlers(fiber: Fiber): boolean {
+  const props = fiber.memoizedProps;
+  if (props == null || typeof props !== 'object') {
+    return false;
+  }
+  return !!(
+    props.onMouseEnter ||
+    props.onMouseLeave ||
+    props.onPointerEnter ||
+    props.onPointerLeave
+  );
+}
+
 export function createFragmentInstance(
   fragmentFiber: Fiber,
 ): FragmentInstanceType {
@@ -3599,6 +3849,9 @@ export function createFragmentInstance(
       fragmentInstance,
     );
   }
+  if (enableFragmentEventHandlers && fragmentHasEnterLeaveHandlers(fragmentFiber)) {
+    attachEnterLeaveListeners(fragmentInstance);
+  }
   return fragmentInstance;
 }
 
@@ -3607,6 +3860,21 @@ export function updateFragmentInstanceFiber(
   instance: FragmentInstanceType,
 ): void {
   instance._fragmentFiber = fragmentFiber;
+  if (enableFragmentEventHandlers) {
+    if (fragmentHasEnterLeaveHandlers(fragmentFiber)) {
+      attachEnterLeaveListeners(instance);
+    } else {
+      detachEnterLeaveListeners(instance);
+    }
+  }
+}
+
+export function destroyFragmentInstance(
+  instance: FragmentInstanceType,
+): void {
+  if (enableFragmentEventHandlers) {
+    detachEnterLeaveListeners(instance);
+  }
 }
 
 export function commitNewChildToFragmentInstance(

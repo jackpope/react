@@ -532,6 +532,8 @@ function createReactNoop(
       // Noop
     },
 
+    destroyFragmentInstance(instance: mixed) {},
+
     commitNewChildToFragmentInstance(child: mixed, fragmentInstance: mixed) {
       // Noop
     },

@@ -37,7 +37,10 @@ import {
   ScopeComponent,
   Fragment,
 } from 'react-reconciler/src/ReactWorkTags';
-import {getLowestCommonAncestor} from 'react-reconciler/src/ReactFiberTreeReflection';
+import {
+  getLowestCommonAncestor,
+  getFragmentParentHostFiber,
+} from 'react-reconciler/src/ReactFiberTreeReflection';
 
 import getEventTarget from './getEventTarget';
 import {
@@ -932,6 +935,81 @@ export function accumulateTwoPhaseListeners(
   return [];
 }
 
+function isPointInsideFragmentBounds(
+  stateNode: mixed,
+  clientX: number,
+  clientY: number,
+): boolean {
+  // $FlowFixMe[prop-missing]
+  const rects = stateNode.getClientRects();
+  if (rects.length === 0) {
+    return false;
+  }
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < rects.length; i++) {
+    const rect = rects[i];
+    if (rect.left < minX) minX = rect.left;
+    if (rect.top < minY) minY = rect.top;
+    if (rect.right > maxX) maxX = rect.right;
+    if (rect.bottom > maxY) maxY = rect.bottom;
+  }
+  return (
+    clientX >= minX && clientX <= maxX && clientY >= minY && clientY <= maxY
+  );
+}
+
+function shouldSuppressFragmentLeave(
+  instance: Fiber,
+  stateNode: mixed,
+  event: KnownReactSyntheticEvent,
+  otherTarget: Fiber | null,
+): boolean {
+  if (otherTarget === null) {
+    return false;
+  }
+  // $FlowFixMe[prop-missing]
+  const fragmentFiber = stateNode._fragmentFiber || instance;
+  const parentHostFiber = getFragmentParentHostFiber(fragmentFiber);
+  if (parentHostFiber === null) {
+    return false;
+  }
+  if (
+    otherTarget !== parentHostFiber &&
+    otherTarget !== parentHostFiber.alternate
+  ) {
+    return false;
+  }
+  const nativeEvent: any = event.nativeEvent;
+  if (
+    isPointInsideFragmentBounds(
+      stateNode,
+      nativeEvent.clientX,
+      nativeEvent.clientY,
+    )
+  ) {
+    // $FlowFixMe[prop-missing]
+    stateNode._suppressedLeaveCount =
+      // $FlowFixMe[prop-missing]
+      (stateNode._suppressedLeaveCount || 0) + 1;
+    return true;
+  }
+  return false;
+}
+
+function shouldSuppressFragmentEnter(stateNode: mixed): boolean {
+  // $FlowFixMe[prop-missing]
+  const count = stateNode._suppressedLeaveCount;
+  if (count != null && count > 0) {
+    // $FlowFixMe[prop-missing]
+    stateNode._suppressedLeaveCount = count - 1;
+    return true;
+  }
+  return false;
+}
+
 function getParent(inst: Fiber | null): Fiber | null {
   if (inst === null) {
     return null;
@@ -966,6 +1044,7 @@ function accumulateEnterLeaveListenersForEvent(
   target: Fiber,
   common: Fiber | null,
   inCapturePhase: boolean,
+  otherTarget: Fiber | null,
 ): void {
   const registrationName = event._reactName;
   const listeners: Array<DispatchListener> = [];
@@ -1010,18 +1089,41 @@ function accumulateEnterLeaveListenersForEvent(
       const fragmentProps = getFragmentCurrentProps(instance, stateNode);
       if (fragmentProps !== null) {
         if (inCapturePhase) {
-          const captureListener = fragmentProps[registrationName];
-          if (captureListener != null) {
-            listeners.unshift(
-              createDispatchListener(instance, captureListener, currentTarget),
-            );
+          if (!shouldSuppressFragmentEnter(stateNode)) {
+            // $FlowFixMe[prop-missing]
+            stateNode.setMouseInside(true);
+            const captureListener = fragmentProps[registrationName];
+            if (captureListener != null) {
+              listeners.unshift(
+                createDispatchListener(
+                  instance,
+                  captureListener,
+                  currentTarget,
+                ),
+              );
+            }
           }
         } else if (!inCapturePhase) {
-          const bubbleListener = fragmentProps[registrationName];
-          if (bubbleListener != null) {
-            listeners.push(
-              createDispatchListener(instance, bubbleListener, currentTarget),
-            );
+          if (
+            !shouldSuppressFragmentLeave(
+              instance,
+              stateNode,
+              event,
+              otherTarget,
+            )
+          ) {
+            // $FlowFixMe[prop-missing]
+            stateNode.setMouseInside(false);
+            const bubbleListener = fragmentProps[registrationName];
+            if (bubbleListener != null) {
+              listeners.push(
+                createDispatchListener(
+                  instance,
+                  bubbleListener,
+                  currentTarget,
+                ),
+              );
+            }
           }
         }
       }
@@ -1055,6 +1157,7 @@ export function accumulateEnterLeaveTwoPhaseListeners(
       from,
       common,
       false,
+      to,
     );
   }
   if (to !== null && enterEvent !== null) {
@@ -1064,8 +1167,10 @@ export function accumulateEnterLeaveTwoPhaseListeners(
       to,
       common,
       true,
+      from,
     );
   }
+
 }
 
 export function accumulateEventHandleNonManagedNodeListeners(

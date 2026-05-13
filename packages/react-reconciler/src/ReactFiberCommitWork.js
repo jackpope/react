@@ -185,6 +185,7 @@ import {
   isSingletonScope,
   updateFragmentInstanceFiber,
   createFragmentInstance,
+  destroyFragmentInstance,
 } from './ReactFiberConfig';
 import {
   captureCommitPhaseError,
@@ -871,9 +872,7 @@ function commitLayoutEffectOnFiber(
         finishedWork.stateNode = createFragmentInstance(finishedWork);
       }
       if (enableFragmentEventHandlers && finishedWork.stateNode !== null) {
-        // Keep the FragmentInstance's fiber reference up to date with the
-        // current (committed) fiber so event dispatch reads current props.
-        finishedWork.stateNode._fragmentFiber = finishedWork;
+        updateFragmentInstanceFiber(finishedWork, finishedWork.stateNode);
       }
     // Fallthrough
     default: {
@@ -1780,6 +1779,9 @@ function commitDeletionEffectsOnFiber(
       if (enableFragmentRefs) {
         if (!offscreenSubtreeWasHidden) {
           safelyDetachRef(deletedFiber, nearestMountedAncestor);
+        }
+        if (enableFragmentEventHandlers && deletedFiber.stateNode !== null) {
+          destroyFragmentInstance(deletedFiber.stateNode);
         }
         recursivelyTraverseDeletionEffects(
           finishedRoot,
@@ -3078,6 +3080,9 @@ export function disappearLayoutEffects(finishedWork: Fiber) {
     case Fragment: {
       if (enableFragmentRefs) {
         safelyDetachRef(finishedWork, finishedWork.return);
+      }
+      if (enableFragmentEventHandlers && finishedWork.stateNode !== null) {
+        destroyFragmentInstance(finishedWork.stateNode);
       }
       // Fallthrough
     }

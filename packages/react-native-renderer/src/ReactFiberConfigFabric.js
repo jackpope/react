@@ -879,6 +879,8 @@ export function updateFragmentInstanceFiber(
   instance._fragmentFiber = fragmentFiber;
 }
 
+export function destroyFragmentInstance(instance: FragmentInstanceType): void {}
+
 export function commitNewChildToFragmentInstance(
   childInstance: Instance | TextInstance,
   fragmentInstance: FragmentInstanceType,

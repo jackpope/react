@@ -166,6 +166,7 @@ export const clearContainer = $$$config.clearContainer;
 export const createFragmentInstance = $$$config.createFragmentInstance;
 export const updateFragmentInstanceFiber =
   $$$config.updateFragmentInstanceFiber;
+export const destroyFragmentInstance = $$$config.destroyFragmentInstance;
 export const commitNewChildToFragmentInstance =
   $$$config.commitNewChildToFragmentInstance;
 export const deleteChildFromFragmentInstance =

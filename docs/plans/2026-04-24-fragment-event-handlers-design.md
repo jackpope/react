@@ -107,15 +107,27 @@ When a Fragment's handler fires, `event.currentTarget` is the FragmentInstance. 
 
 Conceptually `fragmentInstance.dispatchEvent()` should probably use itself as the currentTarget too. This would require some wrapping of the incoming event handler function.
 
-### Enter/Leave and Focus Events
+### Enter/Leave
 
-The common-ancestor logic in `accumulateEnterLeaveListenersForEvent` handles the "moving between Fragment children" case correctly without special handling:
+The common-ancestor logic in `accumulateEnterLeaveListenersForEvent` handles the "moving between Fragment children" case if there is no gap between the elements. But often there is.
 
-- Mouse moves from child A to child B within the same Fragment: the Fragment is the common ancestor, so it sits on neither the `from` path nor the `to` path. Enter/leave handlers don't fire.
-- Mouse enters from outside into child A: the common ancestor is above the Fragment, so the Fragment is on the `to` path and `onMouseEnter` fires.
-- Mouse leaves from child B to outside: symmetric — `onMouseLeave` fires.
+If we want to handle gaps to treat the Fragment conceptually as the parent container, we need to address
 
-This matches wrapper div behavior without a DOM boundary.
+- A -> gap -> B: Should fire no fragment events
+- A -> gap -> outer: Should fire leave event
+- outer -> gap -> outer: Should fire enter -> leave events
+
+#### Hybrid approach: accumulation + parent listeners
+
+Two mechanisms work together:
+
+**Accumulation path** (for events originating from Fragment children): The existing `accumulateEnterLeaveListenersForEvent` handles cases where the cursor enters/leaves a Fragment child. Fragment leave is suppressed when the cursor moves from a child to the parent gap but is still within the Fragment's bounding rect. Fragment enter is suppressed when `_isMouseInside` is already true (cursor re-entering from gap).
+
+**Parent host node listeners** (for gap-only events): When a Fragment has `onMouseEnter`/`onMouseLeave`, `mouseover`/`mouseout` listeners are attached to the Fragment's parent host DOM node. These only fire when `e.target === parentNode` (the cursor is in the gap, not on a child element). They track cursor position against a cached bounding rect and fire enter/leave when the cursor crosses the Fragment's boundary from within the gap.
+
+The `_isMouseInside` boolean on FragmentInstance coordinates the two mechanisms — the accumulation path sets it on enter and clears it on leave, while the parent listener reads it to avoid double-firing and handles deferred leave when the cursor exits via the gap.
+
+The bounding rect is cached when the cursor enters the Fragment area and cleared on exit, so `getClientRects()` is not recomputed on every mouse event.
 
 ## Implementation Design
 

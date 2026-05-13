@@ -29,7 +29,7 @@ export default function OnMouseEnterLeaveCase() {
         <li>
           Move mouse from Child B to the gap between children (still within the
           parent div but outside Fragment children) — observe Fragment
-          onMouseLeave fires
+          onMouseLeave does NOT fire (cursor is still within Fragment bounds)
         </li>
         <li>
           Move mouse completely outside the parent — observe both Fragment and
@@ -41,13 +41,16 @@ export default function OnMouseEnterLeaveCase() {
         <p>
           Fragment onMouseEnter fires when the mouse enters any child of the
           Fragment from outside. It does NOT fire when moving between children
-          within the same Fragment (matching wrapper div behavior). Fragment
-          onMouseLeave fires when the mouse leaves all Fragment children.
+          within the same Fragment, including through gaps between children
+          (matching wrapper div behavior). Fragment onMouseLeave fires when the
+          mouse leaves the Fragment's bounding area entirely.
         </p>
         <p>
           The common-ancestor logic handles "moving between Fragment children"
           correctly: the Fragment is the common ancestor, so it sits on neither
           the from-path nor the to-path, and enter/leave handlers don't fire.
+          Gap transitions are suppressed by checking that the cursor is still
+          within the Fragment's bounding rect.
         </p>
       </TestCase.ExpectedResult>
 

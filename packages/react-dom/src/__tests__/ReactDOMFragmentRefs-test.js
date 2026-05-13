@@ -3085,6 +3085,326 @@ describe('FragmentRefs', () => {
   });
 
   // @gate enableFragmentEventHandlers
+  it('does not fire onMouseLeave when mouse moves to gap between Fragment children', async () => {
+    const onMouseLeave = jest.fn();
+    const onMouseEnter = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div id="parent">
+          <Fragment onMouseLeave={onMouseLeave} onMouseEnter={onMouseEnter}>
+            <div id="a">A</div>
+            <div id="b">B</div>
+          </Fragment>
+        </div>,
+      ),
+    );
+
+    const parent = container.querySelector('#parent');
+    const a = container.querySelector('#a');
+    const b = container.querySelector('#b');
+
+    // Mock getClientRects on children to simulate layout
+    a.getClientRects = () => [
+      {left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50},
+    ];
+    b.getClientRects = () => [
+      {left: 120, top: 0, right: 220, bottom: 50, width: 100, height: 50},
+    ];
+
+    // Enter from outside into A
+    a.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+    expect(onMouseEnter).toHaveBeenCalledTimes(1);
+    onMouseEnter.mockClear();
+
+    // Move from A to gap (parent div) — cursor at (110, 25) is between children
+    a.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: parent,
+        clientX: 110,
+        clientY: 25,
+      }),
+    );
+    // Fragment leave should NOT fire because cursor is within Fragment bounds
+    expect(onMouseLeave).toHaveBeenCalledTimes(0);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('does not fire onMouseEnter when mouse moves from gap to Fragment child', async () => {
+    const onMouseEnter = jest.fn();
+    const onMouseLeave = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div id="parent">
+          <Fragment onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+            <div id="a">A</div>
+            <div id="b">B</div>
+          </Fragment>
+        </div>,
+      ),
+    );
+
+    const parent = container.querySelector('#parent');
+    const a = container.querySelector('#a');
+    const b = container.querySelector('#b');
+
+    a.getClientRects = () => [
+      {left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50},
+    ];
+    b.getClientRects = () => [
+      {left: 120, top: 0, right: 220, bottom: 50, width: 100, height: 50},
+    ];
+
+    // Enter from outside into A
+    a.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+    expect(onMouseEnter).toHaveBeenCalledTimes(1);
+    onMouseEnter.mockClear();
+
+    // Move from A to gap — suppressed
+    a.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: parent,
+        clientX: 110,
+        clientY: 25,
+      }),
+    );
+
+    // Move from gap (parent) to B — enter should be suppressed
+    parent.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: b,
+        clientX: 120,
+        clientY: 25,
+      }),
+    );
+    expect(onMouseEnter).toHaveBeenCalledTimes(0);
+    expect(onMouseLeave).toHaveBeenCalledTimes(0);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('fires onMouseLeave when mouse leaves Fragment area entirely', async () => {
+    const onMouseLeave = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div id="parent">
+          <Fragment onMouseLeave={onMouseLeave}>
+            <div id="a">A</div>
+            <div id="b">B</div>
+          </Fragment>
+        </div>,
+      ),
+    );
+
+    const parent = container.querySelector('#parent');
+    const a = container.querySelector('#a');
+    const b = container.querySelector('#b');
+
+    a.getClientRects = () => [
+      {left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50},
+    ];
+    b.getClientRects = () => [
+      {left: 120, top: 0, right: 220, bottom: 50, width: 100, height: 50},
+    ];
+
+    // Enter from outside into A
+    a.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+
+    // Move from A to parent — cursor far outside Fragment bounds
+    a.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: parent,
+        clientX: 500,
+        clientY: 500,
+      }),
+    );
+    // Fragment leave SHOULD fire because cursor is outside Fragment bounds
+    expect(onMouseLeave).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('fires onMouseLeave when mouse moves to sibling outside Fragment', async () => {
+    const onMouseLeave = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div>
+          <Fragment onMouseLeave={onMouseLeave}>
+            <div id="a">A</div>
+          </Fragment>
+          <div id="sibling">Sibling</div>
+        </div>,
+      ),
+    );
+
+    const a = container.querySelector('#a');
+    const sibling = container.querySelector('#sibling');
+
+    a.getClientRects = () => [
+      {left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50},
+    ];
+
+    // Enter from outside into A
+    a.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+
+    // Move from A directly to sibling
+    a.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: sibling,
+        clientX: 100,
+        clientY: 60,
+      }),
+    );
+    // Fragment leave SHOULD fire — sibling is not the Fragment's parent
+    expect(onMouseLeave).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('fires deferred onMouseLeave when mouse exits from gap to outside parent', async () => {
+    const onMouseLeave = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div id="parent">
+          <Fragment onMouseLeave={onMouseLeave}>
+            <div id="a">A</div>
+            <div id="b">B</div>
+          </Fragment>
+          <div id="outside">Outside</div>
+        </div>,
+      ),
+    );
+
+    const parent = container.querySelector('#parent');
+    const a = container.querySelector('#a');
+    const b = container.querySelector('#b');
+    const outside = container.querySelector('#outside');
+
+    a.getClientRects = () => [
+      {left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50},
+    ];
+    b.getClientRects = () => [
+      {left: 120, top: 0, right: 220, bottom: 50, width: 100, height: 50},
+    ];
+
+    // Enter from outside into A
+    a.dispatchEvent(
+      new MouseEvent('mouseover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+
+    // Move from A to gap — leave suppressed
+    a.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: parent,
+        clientX: 110,
+        clientY: 25,
+      }),
+    );
+    expect(onMouseLeave).toHaveBeenCalledTimes(0);
+
+    // Move from gap to outside element — deferred leave should fire
+    parent.dispatchEvent(
+      new MouseEvent('mouseout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: outside,
+        clientX: 0,
+        clientY: 100,
+      }),
+    );
+    expect(onMouseLeave).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('does not fire onPointerLeave when pointer moves through gap between Fragment children', async () => {
+    const onPointerLeave = jest.fn();
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div id="parent">
+          <Fragment onPointerLeave={onPointerLeave}>
+            <div id="a">A</div>
+            <div id="b">B</div>
+          </Fragment>
+        </div>,
+      ),
+    );
+
+    const parent = container.querySelector('#parent');
+    const a = container.querySelector('#a');
+    const b = container.querySelector('#b');
+
+    a.getClientRects = () => [
+      {left: 0, top: 0, right: 100, bottom: 50, width: 100, height: 50},
+    ];
+    b.getClientRects = () => [
+      {left: 120, top: 0, right: 220, bottom: 50, width: 100, height: 50},
+    ];
+
+    // Enter from outside
+    a.dispatchEvent(
+      new MouseEvent('pointerover', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: null,
+      }),
+    );
+
+    // Move from A to gap
+    a.dispatchEvent(
+      new MouseEvent('pointerout', {
+        bubbles: true,
+        cancelable: true,
+        relatedTarget: parent,
+        clientX: 110,
+        clientY: 25,
+      }),
+    );
+    expect(onPointerLeave).toHaveBeenCalledTimes(0);
+  });
+
+  // @gate enableFragmentEventHandlers
   it('Fragment with no host children — handler never fires', async () => {
     const onClick = jest.fn();
     function Empty() {
