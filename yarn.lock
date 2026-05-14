@@ -9240,12 +9240,12 @@ flatted@^3.2.9:
   resolved "https://registry.yarnpkg.com/flatted/-/flatted-3.3.1.tgz#21db470729a6734d4997002f439cb308987f567a"
   integrity sha512-X8cqMLLie7KsNUDSdzeN8FYK9rEt4Dt67OsG/DNGnYTSDBG4uFAJFBnUeiV+zCVAvwFy56IjM9sH51jVaEhNxw==
 
-flow-bin@^0.311.0:
-  version "0.311.0"
-  resolved "https://registry.yarnpkg.com/flow-bin/-/flow-bin-0.311.0.tgz#a1cbef22d1cb9e05b58ffdbad1c73ed03f4122e2"
-  integrity sha512-4lXxjhPdmkeizju3F0HDCMYGkoL7hiq0W9bAW4pQpQTi56op+QZrVyMENjbCGZc+KlFBLwWkur+EkyfPTsa6xw==
+flow-bin@^0.314.0:
+  version "0.314.0"
+  resolved "https://registry.yarnpkg.com/flow-bin/-/flow-bin-0.314.0.tgz#bc47546316cece96b7c48983d6f9bc5e50444fb5"
+  integrity sha512-cQmUJPsW8G0FGbVKDqmQv4YCXfuykQPHVxia7gwX4R3dpOCfJqNm28CHFqzUg29Zk0biqbXtpe+kWdfh7bYPbw==
 
-flow-remove-types@^2.309.0:
+flow-remove-types@^2.314.0:
   version "2.314.0"
   resolved "https://registry.yarnpkg.com/flow-remove-types/-/flow-remove-types-2.314.0.tgz#4327da31ecec1fede4e5a7ffcc4195c818f7da60"
   integrity sha512-zFroPHhG55D+Vgsj1rrWsyGaoYMJwZR37ENWPu+MGjJPVYRu8qA41wr6QlKD8IMHho03h69ctmR+jjFL2CcS5w==

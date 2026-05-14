@@ -33,6 +33,7 @@ unsafe-object-assign=off
 [options]
 munge_underscores=false
 react.custom_jsx_typing=true
+casting_syntax=both
 
 # Substituted by createFlowConfig.js:
 %REACT_RENDERER_FLOW_OPTIONS%

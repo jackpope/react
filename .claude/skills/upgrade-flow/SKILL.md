@@ -43,8 +43,9 @@ Focus the summary on:
 ### Phase 3: Install New Version
 
 1. Update `package.json`: change `flow-bin` version to `^{TARGET}`
-2. Run `yarn install`
-3. Verify: `node_modules/.bin/flow version` should show target version
+2. Update `package.json`: change `flow-remove-types` version to `^2.{TARGET_MINOR}.0` (e.g. `^2.313.0` for Flow 0.313.0)
+3. Run `yarn install`
+4. Verify: `node_modules/.bin/flow version` should show target version
 
 ### Phase 4: Run Flow and Assess Errors
 
