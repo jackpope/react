@@ -260,6 +260,7 @@ export function ensureSuspendableThenableStateDEV(
       case 'fulfilled':
         const previousThenableValue = lastThenable.value;
         // $FlowIgnore[method-unbinding] We rebind .then immediately.
+        // $FlowFixMe[method-unbinding]
         const previousThenableThen = lastThenable.then.bind(lastThenable);
         delete lastThenable.value;
         delete (lastThenable: any).status;

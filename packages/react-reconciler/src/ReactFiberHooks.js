@@ -416,8 +416,10 @@ function warnIfAsyncClientComponent(Component: Function) {
     // bulletproof but together they cover the most common cases.
     const isAsyncFunction =
       // $FlowIgnore[method-unbinding]
+      // $FlowFixMe[method-unbinding]
       Object.prototype.toString.call(Component) === '[object AsyncFunction]' ||
       // $FlowIgnore[method-unbinding]
+      // $FlowFixMe[method-unbinding]
       Object.prototype.toString.call(Component) ===
         '[object AsyncGeneratorFunction]';
     if (isAsyncFunction) {
@@ -1148,6 +1150,7 @@ function useThenable<T>(thenable: Thenable<T>): T {
 }
 
 function use<T>(usable: Usable<T>): T {
+  // $FlowFixMe[invalid-compare]
   if (usable !== null && typeof usable === 'object') {
     // $FlowFixMe[method-unbinding]
     if (typeof usable.then === 'function') {
@@ -1526,6 +1529,7 @@ function updateReducerImpl<S, A>(
         }
       }
       update = update.next;
+    // $FlowFixMe[invalid-compare]
     } while (update !== null && update !== first);
 
     if (newBaseQueueLast === null) {
@@ -2472,6 +2476,7 @@ function updateActionStateImpl<S, P>(
   let state: Awaited<S>;
   if (
     typeof actionResult === 'object' &&
+    // $FlowFixMe[invalid-compare]
     actionResult !== null &&
     // $FlowFixMe[method-unbinding]
     typeof actionResult.then === 'function'
@@ -2645,7 +2650,7 @@ function updateEffectImpl(
     if (nextDeps !== null) {
       const prevEffect: Effect = currentHook.memoizedState;
       const prevDeps = prevEffect.deps;
-      // $FlowFixMe[incompatible-call] (@poteto)
+      // $FlowFixMe[incompatible-type] (@poteto)
       if (areHookInputsEqual(nextDeps, prevDeps)) {
         hook.memoizedState = pushSimpleEffect(
           hookFlags,
@@ -2726,6 +2731,7 @@ function mountEvent<Args, Return, F: (...Array<Args>) => Return>(
   const ref = {impl: callback};
   hook.memoizedState = ref;
   // $FlowIgnore[incompatible-return]
+  // $FlowFixMe[incompatible-type]
   return function eventFn() {
     if (isInvalidExecutionContextForEventFunction()) {
       throw new Error(
@@ -2743,6 +2749,7 @@ function updateEvent<Args, Return, F: (...Array<Args>) => Return>(
   const ref = hook.memoizedState;
   useEffectEventImpl({ref, nextImpl: callback});
   // $FlowIgnore[incompatible-return]
+  // $FlowFixMe[incompatible-type]
   return function eventFn() {
     if (isInvalidExecutionContextForEventFunction()) {
       throw new Error(
@@ -2833,6 +2840,7 @@ function mountImperativeHandle<T>(
       console.error(
         'Expected useImperativeHandle() second argument to be a function ' +
           'that creates a handle. Instead received: %s.',
+        // $FlowFixMe[invalid-compare]
         create !== null ? typeof create : 'null',
       );
     }
@@ -2867,6 +2875,7 @@ function updateImperativeHandle<T>(
       console.error(
         'Expected useImperativeHandle() second argument to be a function ' +
           'that creates a handle. Instead received: %s.',
+        // $FlowFixMe[invalid-compare]
         create !== null ? typeof create : 'null',
       );
     }

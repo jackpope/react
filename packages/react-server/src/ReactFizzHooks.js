@@ -360,6 +360,7 @@ export function useReducer<S, I, A>(
   init?: I => S,
 ): [S, Dispatch<A>] {
   if (__DEV__) {
+    // $FlowFixMe[invalid-compare]
     if (reducer !== basicStateReducer) {
       currentHookNameInDev = 'useReducer';
     }
@@ -409,6 +410,7 @@ export function useReducer<S, I, A>(
       isInHookUserCodeInDev = true;
     }
     let initialState;
+    // $FlowFixMe[invalid-compare]
     if (reducer === basicStateReducer) {
       // Special case for `useState`.
       initialState =
@@ -445,6 +447,7 @@ function useMemo<T>(nextCreate: () => T, deps: Array<mixed> | void | null): T {
 
   const nextDeps = deps === undefined ? null : deps;
 
+  // $FlowFixMe[invalid-compare]
   if (workInProgressHook !== null) {
     const prevState = workInProgressHook.memoizedState;
     if (prevState !== null) {
@@ -546,6 +549,7 @@ export function useEffectEvent<Args, Return, F: (...Array<Args>) => Return>(
   callback: F,
 ): F {
   // $FlowIgnore[incompatible-return]
+  // $FlowFixMe[incompatible-type]
   return throwOnUseEffectEventCall;
 }
 
@@ -630,6 +634,7 @@ function useActionState<S, P>(
   const request: Request = (currentlyRenderingRequest: any);
 
   // $FlowIgnore[prop-missing]
+  // $FlowFixMe[prop-missing]
   const formAction = action.$$FORM_ACTION;
   if (typeof formAction === 'function') {
     // This is a server action. These have additional features to enable
@@ -652,6 +657,7 @@ function useActionState<S, P>(
     const componentKeyPath = (currentlyRenderingKeyPath: any);
     const postbackActionState = getFormState(request);
     // $FlowIgnore[prop-missing]
+    // $FlowFixMe[prop-missing]
     const isSignatureEqual = action.$$IS_SIGNATURE_EQUAL;
     if (
       postbackActionState !== null &&
@@ -688,6 +694,7 @@ function useActionState<S, P>(
     // $FlowIgnore[prop-missing]
     if (typeof boundAction.$$FORM_ACTION === 'function') {
       // $FlowIgnore[prop-missing]
+      // $FlowFixMe[prop-missing]
       dispatch.$$FORM_ACTION = (prefix: string) => {
         const metadata: ReactCustomFormAction =
           boundAction.$$FORM_ACTION(prefix);
@@ -746,6 +753,7 @@ function useId(): string {
 }
 
 function use<T>(usable: Usable<T>): T {
+  // $FlowFixMe[invalid-compare]
   if (usable !== null && typeof usable === 'object') {
     // $FlowFixMe[method-unbinding]
     if (typeof usable.then === 'function') {
@@ -803,6 +811,7 @@ function clientHookNotSupported() {
   );
 }
 
+// $FlowFixMe[constant-condition]
 export const HooksDispatcher: Dispatcher = supportsClientAPIs
   ? {
       readContext,

@@ -95,10 +95,10 @@ function decodeBoundActionMetaData(
     bound: null | Promise<Array<any>>,
   }>(actionResponse);
   // Force it to initialize
-  // $FlowFixMe
+  // $FlowFixMe[incompatible-type]
   refPromise.then(() => {});
   if (refPromise.status !== 'fulfilled') {
-    // $FlowFixMe
+    // $FlowFixMe[prop-missing]
     throw refPromise.reason;
   }
   return refPromise.value;

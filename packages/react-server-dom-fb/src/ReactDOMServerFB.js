@@ -76,6 +76,7 @@ function renderToStream(children: ReactNodeList, options: Options): Stream {
     throw destination.error;
   }
   return {
+    // $FlowFixMe[incompatible-type]
     destination,
     request,
   };
