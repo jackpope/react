@@ -2125,7 +2125,7 @@ function mountLazyComponent(
         renderLanes,
       );
     }
-  // $FlowFixMe[invalid-compare]
+    // $FlowFixMe[invalid-compare]
   } else if (Component !== undefined && Component !== null) {
     const $$typeof = Component.$$typeof;
     // $FlowFixMe[invalid-compare]
@@ -2142,7 +2142,7 @@ function mountLazyComponent(
         props,
         renderLanes,
       );
-    // $FlowFixMe[invalid-compare]
+      // $FlowFixMe[invalid-compare]
     } else if ($$typeof === REACT_MEMO_TYPE) {
       workInProgress.tag = MemoComponent;
       return updateMemoComponent(
@@ -2152,7 +2152,7 @@ function mountLazyComponent(
         props,
         renderLanes,
       );
-    // $FlowFixMe[invalid-compare]
+      // $FlowFixMe[invalid-compare]
     } else if ($$typeof === REACT_CONTEXT_TYPE) {
       workInProgress.tag = ContextProvider;
       workInProgress.type = Component;

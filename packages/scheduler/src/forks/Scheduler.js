@@ -603,7 +603,7 @@ export {
 export const unstable_Profiling: {
   startLoggingProfilingEvents(): void,
   stopLoggingProfilingEvents(): ArrayBuffer | null,
-// $FlowFixMe[constant-condition]
+  // $FlowFixMe[constant-condition]
 } | null = enableProfiling
   ? {
       startLoggingProfilingEvents,

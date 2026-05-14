@@ -283,7 +283,7 @@ function appendAllChildren(
       node.sibling.return = node.return;
       node = node.sibling;
     }
-  // $FlowFixMe[constant-condition]
+    // $FlowFixMe[constant-condition]
   } else if (supportsPersistence) {
     // We only have the top Fiber that was created but we need recurse down its
     // children to find all the terminal nodes.
@@ -477,7 +477,7 @@ function updateHostComponent(
     }
 
     markUpdate(workInProgress);
-  // $FlowFixMe[constant-condition]
+    // $FlowFixMe[constant-condition]
   } else if (supportsPersistence) {
     const currentInstance = current.stateNode;
     const oldProps = current.memoizedProps;
@@ -681,7 +681,7 @@ function updateHostText(
     if (oldText !== newText) {
       markUpdate(workInProgress);
     }
-  // $FlowFixMe[constant-condition]
+    // $FlowFixMe[constant-condition]
   } else if (supportsPersistence) {
     if (oldText !== newText) {
       // If the text content differs, we'll create a new text instance for it.

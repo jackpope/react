@@ -967,7 +967,7 @@ function insertDestinationClonesOfFiber(
           parentViewTransition,
           nextPhase,
         );
-      // $FlowFixMe[invalid-compare]
+        // $FlowFixMe[invalid-compare]
       } else if (current !== null && current.memoizedState === null) {
         // Was previously mounted as visible but is now hidden.
         trackEnterViewTransitions(current);
@@ -1315,7 +1315,7 @@ function restoreViewTransitionsOnFiber(finishedWork: Fiber) {
         const isHidden = newState !== null;
         if (!isHidden) {
           restoreEnterOrExitViewTransitions(finishedWork);
-        // $FlowFixMe[invalid-compare]
+          // $FlowFixMe[invalid-compare]
         } else if (current !== null && current.memoizedState === null) {
           // Was previously mounted as visible but is now hidden.
           restoreEnterOrExitViewTransitions(current);

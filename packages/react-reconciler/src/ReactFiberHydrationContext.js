@@ -803,7 +803,7 @@ function popHydrationState(fiber: Fiber): boolean {
     nextHydratableInstance = skipPastDehydratedSuspenseInstance(fiber);
   } else if (tag === ActivityComponent) {
     nextHydratableInstance = skipPastDehydratedActivityInstance(fiber);
-  // $FlowFixMe[constant-condition]
+    // $FlowFixMe[constant-condition]
   } else if (supportsSingletons && tag === HostSingleton) {
     nextHydratableInstance = getNextHydratableSiblingAfterSingleton(
       fiber.type,

@@ -3564,8 +3564,8 @@ function pushTitle(
             ' tags to a single string value.',
           childType,
         );
-      // $FlowFixMe[constant-condition]
-      // $FlowFixMe[invalid-compare]
+        // $FlowFixMe[constant-condition]
+        // $FlowFixMe[invalid-compare]
       } else if (child && child.toString === {}.toString) {
         if (child.$$typeof != null) {
           console.error(
@@ -4025,7 +4025,7 @@ function pushStartCustomElement(
             // $FlowFixMe[invalid-compare]
             if (propValue === false) {
               continue;
-            // $FlowFixMe[invalid-compare]
+              // $FlowFixMe[invalid-compare]
             } else if (propValue === true) {
               propValue = '';
             } else if (typeof propValue === 'object') {

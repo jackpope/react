@@ -4204,7 +4204,7 @@ function renderNode(
 
       if (request.status === ABORTING) {
         // We are aborting so we can just bubble up to the task by falling through
-      // $FlowFixMe[invalid-compare]
+        // $FlowFixMe[invalid-compare]
       } else if (typeof x === 'object' && x !== null) {
         // $FlowFixMe[method-unbinding]
         if (typeof x.then === 'function') {
@@ -4306,7 +4306,7 @@ function renderNode(
 
       if (request.status === ABORTING) {
         // We are aborting so we can just bubble up to the task by falling through
-      // $FlowFixMe[invalid-compare]
+        // $FlowFixMe[invalid-compare]
       } else if (typeof x === 'object' && x !== null) {
         // $FlowFixMe[method-unbinding]
         if (typeof x.then === 'function') {

@@ -606,14 +606,14 @@ function readContextForConsumer<T>(
     // $FlowFixMe[incompatible-type]
     lastContextDependency = contextItem;
     consumer.dependencies = __DEV__
-      // $FlowFixMe[incompatible-type]
-      ? {
+      ? // $FlowFixMe[incompatible-type]
+        {
           lanes: NoLanes,
           firstContext: contextItem,
           _debugThenableState: null,
         }
-      // $FlowFixMe[incompatible-type]
-      : {
+      : // $FlowFixMe[incompatible-type]
+        {
           lanes: NoLanes,
           firstContext: contextItem,
         };

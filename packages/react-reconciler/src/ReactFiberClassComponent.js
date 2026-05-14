@@ -1070,10 +1070,12 @@ function updateClassInstance(
     !hasContextChanged() &&
     !checkHasForceUpdateAfterProcessing() &&
     !(
-      // $FlowFixMe[invalid-compare]
-      current !== null &&
-      current.dependencies !== null &&
-      checkIfContextChanged(current.dependencies)
+      (
+        // $FlowFixMe[invalid-compare]
+        current !== null &&
+        current.dependencies !== null &&
+        checkIfContextChanged(current.dependencies)
+      )
     )
   ) {
     // If an update was already in progress, we should schedule an Update

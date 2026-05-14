@@ -1529,7 +1529,7 @@ function updateReducerImpl<S, A>(
         }
       }
       update = update.next;
-    // $FlowFixMe[invalid-compare]
+      // $FlowFixMe[invalid-compare]
     } while (update !== null && update !== first);
 
     if (newBaseQueueLast === null) {

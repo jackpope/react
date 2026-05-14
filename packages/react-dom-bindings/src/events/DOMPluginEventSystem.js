@@ -926,7 +926,7 @@ function accumulateEnterLeaveListenersForEvent(
             createDispatchListener(instance, captureListener, currentTarget),
           );
         }
-      // $FlowFixMe[constant-condition]
+        // $FlowFixMe[constant-condition]
       } else if (!inCapturePhase) {
         const bubbleListener = getListener(instance, registrationName);
         if (bubbleListener != null) {

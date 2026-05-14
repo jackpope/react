@@ -4115,7 +4115,7 @@ function logRecoverableError(
       } else {
         errorDigest = callWithDebugContextInDEV(request, task, onError, error);
       }
-    // $FlowFixMe[constant-condition]
+      // $FlowFixMe[constant-condition]
     } else if (supportsRequestStorage) {
       // Exit the request context while running callbacks.
       errorDigest = requestStorage.run(undefined, onError, error);
