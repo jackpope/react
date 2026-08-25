@@ -18,3 +18,14 @@ The compiler Playground at `compiler/apps/playground` is **not** part of the com
 - **React Compiler** (from `compiler/`): primary test suite is the custom snapshot runner — `yarn snap:build` once, then `yarn snap` (add `-p <pattern>`, `-u` to update, `-d` for debug). Lint `yarn workspace babel-plugin-react-compiler lint`. See `compiler/CLAUDE.md`.
 - **Rust port** (from `compiler/`): `cargo test` / `cargo build`.
 - **Playground app** (the runnable GUI): from `compiler/`, `yarn dev` builds the compiler + runtime in watch mode and starts Next.js on `http://localhost:3000`. First readiness takes ~10–15s after the compiler watch build. Editing the left editor recompiles the right (compiled-output) pane live. Requires playground deps installed (see gotcha above).
+
+### Build CLI notes
+- `yarn build` builds **all** channels (stable + experimental) for every package — it's slow (~9 min single-worker) and needs Java (present). Narrow it: `yarn build --r=experimental` (or `--r=stable`) builds one channel into `build/oss-experimental` (or `build/oss-stable`); `yarn build <bundles> --type=NODE --release-channel=experimental` builds specific packages. CI sharding uses `--index=N --total=25 --ci`.
+- `yarn build` overwrites `packages/shared/ReactVersion.js` with a placeholder version (expected). Restore it (`git checkout -- packages/shared/ReactVersion.js`) and do not commit it.
+- Validate build output with `yarn lint-build`; regenerate error codes with `yarn extract-errors`.
+
+### Fixtures (browser dev harnesses under `fixtures/`)
+- Fixtures depend on a **local React build**: run `yarn build --r=experimental` at the repo root first (produces `build/oss-experimental`).
+- **DOM fixture** (`fixtures/dom`): `yarn --cwd fixtures/dom install`, then `yarn predev` (copies `build/oss-experimental/.` into its `node_modules` — this is what wires in the freshly built React), then `yarn dev` (Create React App dev server, defaults to port 3000; set `PORT` to avoid clashing with the compiler playground).
+  - Gotcha: it pins the ancient `react-scripts@1.1.5`, whose webpack needs `NODE_OPTIONS=--openssl-legacy-provider` under node 20 (OpenSSL 3) to boot. Its bundled `eslint-loader` also emits a non-fatal `Parsing error: Unexpected token` on JSX fragment shorthand (`<>`); the app still compiles ("Compiled with warnings"). Use `BROWSER=none CI=false` to keep the dev server foregrounded without opening a browser or treating warnings as errors.
+  - CI validates this fixture with `yarn predev && yarn test` (`react-scripts test --env=jsdom`), not the dev server.
