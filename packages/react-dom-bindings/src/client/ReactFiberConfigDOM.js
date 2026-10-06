@@ -4732,7 +4732,10 @@ export function setFocusIfFocusable(
     element.ownerDocument.removeEventListener('focus', handleFocus, true);
   }
 
-  return didFocus;
+  // No focus event reaches the document when the window doesn't have system
+  // focus (browsers defer it until it does) or when focus moves within the
+  // same shadow root, even though the element became the active element.
+  return didFocus || (element.getRootNode() as any).activeElement === element;
 }
 
 type RectRatio = {
