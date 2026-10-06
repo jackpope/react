@@ -28,6 +28,47 @@ function Wrapper({children}) {
   return children;
 }
 
+// Chromium, when the window does not have system focus
+// (document.hasFocus() === false), still moves document.activeElement on
+// element.focus() but defers focus/blur events until the window is focused.
+// jsdom dispatches them synchronously, so swallow them at the window before
+// any other listener can observe them.
+function emulateUnfocusedWindow() {
+  const eventTypes = ['focus', 'focusin', 'blur', 'focusout'];
+  const deferredFocusTargets = [];
+  let isSwallowing = false;
+  const swallow = event => {
+    if (isSwallowing) {
+      if (event.type === 'focus') {
+        deferredFocusTargets.push(event.target.id);
+      }
+      event.stopImmediatePropagation();
+    }
+  };
+  eventTypes.forEach(type => window.addEventListener(type, swallow, true));
+  const originalFocus = HTMLElement.prototype.focus;
+  HTMLElement.prototype.focus = function (options) {
+    isSwallowing = true;
+    try {
+      originalFocus.call(this, options);
+    } finally {
+      isSwallowing = false;
+    }
+  };
+  const originalHasFocus = document.hasFocus;
+  document.hasFocus = () => false;
+  return {
+    deferredFocusTargets,
+    restore() {
+      HTMLElement.prototype.focus = originalFocus;
+      document.hasFocus = originalHasFocus;
+      eventTypes.forEach(type =>
+        window.removeEventListener(type, swallow, true),
+      );
+    },
+  };
+}
+
 describe('FragmentRefs', () => {
   beforeEach(() => {
     jest.resetModules();
@@ -353,6 +394,82 @@ describe('FragmentRefs', () => {
         expect(document.activeElement.id).toEqual('street');
         document.activeElement.blur();
       });
+
+      // @gate enableFragmentRefs
+      it('focuses the first focusable child when the window does not have focus', async () => {
+        const fragmentRef = React.createRef();
+        const root = ReactDOMClient.createRoot(container);
+
+        function Test() {
+          return (
+            <div>
+              <Fragment ref={fragmentRef}>
+                <div id="child-a" />
+                <a id="child-b" href="/">
+                  B
+                </a>
+                <span id="child-c">C</span>
+                <button id="child-d">D</button>
+                <style>{`#child-c {}`}</style>
+                <input id="child-e" />
+                <div id="child-f" />
+              </Fragment>
+            </div>
+          );
+        }
+
+        await act(() => {
+          root.render(<Test />);
+        });
+
+        const unfocusedWindow = emulateUnfocusedWindow();
+        try {
+          await act(() => {
+            fragmentRef.current.focus();
+          });
+          expect(document.hasFocus()).toBe(false);
+          expect(document.activeElement.id).toEqual('child-b');
+          expect(unfocusedWindow.deferredFocusTargets).toEqual(['child-b']);
+        } finally {
+          unfocusedWindow.restore();
+        }
+        document.activeElement.blur();
+      });
+
+      // @gate enableFragmentRefs
+      it('focuses the first focusable child when focus is already in the same shadow root', async () => {
+        const fragmentRef = React.createRef();
+        const host = document.createElement('div');
+        container.appendChild(host);
+        const shadowRoot = host.attachShadow({mode: 'open'});
+        const shadowContainer = document.createElement('div');
+        shadowRoot.appendChild(shadowContainer);
+        const root = ReactDOMClient.createRoot(shadowContainer);
+
+        await act(() => {
+          root.render(
+            <Fragment ref={fragmentRef}>
+              <div id="child-a" />
+              <a id="child-b" href="/">
+                B
+              </a>
+              <button id="child-c">C</button>
+              <input id="child-d" />
+            </Fragment>,
+          );
+        });
+
+        // Focus moving within a shadow root does not dispatch focus events
+        // outside of it.
+        shadowRoot.getElementById('child-c').focus();
+        expect(shadowRoot.activeElement.id).toEqual('child-c');
+
+        await act(() => {
+          fragmentRef.current.focus();
+        });
+        expect(shadowRoot.activeElement.id).toEqual('child-b');
+        shadowRoot.activeElement.blur();
+      });
     });
 
     describe('focusLast()', () => {
@@ -420,6 +537,80 @@ describe('FragmentRefs', () => {
           fragmentRef.current.focusLast();
         });
         expect(document.activeElement.id).toEqual('grandchild-b');
+      });
+
+      // @gate enableFragmentRefs
+      it('focuses the last focusable child when the window does not have focus', async () => {
+        const fragmentRef = React.createRef();
+        const root = ReactDOMClient.createRoot(container);
+
+        function Test() {
+          return (
+            <div>
+              <Fragment ref={fragmentRef}>
+                <div id="child-a" />
+                <a id="child-b" href="/">
+                  B
+                </a>
+                <span id="child-c">C</span>
+                <button id="child-d">D</button>
+                <style>{`#child-c {}`}</style>
+                <input id="child-e" />
+                <div id="child-f" />
+              </Fragment>
+            </div>
+          );
+        }
+
+        await act(() => {
+          root.render(<Test />);
+        });
+
+        const unfocusedWindow = emulateUnfocusedWindow();
+        try {
+          await act(() => {
+            fragmentRef.current.focusLast();
+          });
+          expect(document.hasFocus()).toBe(false);
+          expect(document.activeElement.id).toEqual('child-e');
+          expect(unfocusedWindow.deferredFocusTargets).toEqual(['child-e']);
+        } finally {
+          unfocusedWindow.restore();
+        }
+        document.activeElement.blur();
+      });
+
+      // @gate enableFragmentRefs
+      it('focuses the last focusable child when focus is already in the same shadow root', async () => {
+        const fragmentRef = React.createRef();
+        const host = document.createElement('div');
+        container.appendChild(host);
+        const shadowRoot = host.attachShadow({mode: 'open'});
+        const shadowContainer = document.createElement('div');
+        shadowRoot.appendChild(shadowContainer);
+        const root = ReactDOMClient.createRoot(shadowContainer);
+
+        await act(() => {
+          root.render(
+            <Fragment ref={fragmentRef}>
+              <a id="child-a" href="/">
+                A
+              </a>
+              <button id="child-b">B</button>
+              <input id="child-c" />
+              <div id="child-d" />
+            </Fragment>,
+          );
+        });
+
+        shadowRoot.getElementById('child-b').focus();
+        expect(shadowRoot.activeElement.id).toEqual('child-b');
+
+        await act(() => {
+          fragmentRef.current.focusLast();
+        });
+        expect(shadowRoot.activeElement.id).toEqual('child-c');
+        shadowRoot.activeElement.blur();
       });
     });
 
