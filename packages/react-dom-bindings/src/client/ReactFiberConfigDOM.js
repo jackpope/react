@@ -4825,6 +4825,9 @@ export function setFocusIfFocusable(
     return true;
   }
 
+  const root = getHoistableRoot(element);
+  const activeElementBefore = getActiveElementOfRoot(root);
+
   let didFocus = false;
   const handleFocus = () => {
     didFocus = true;
@@ -4843,22 +4846,33 @@ export function setFocusIfFocusable(
   }
 
   if (didFocus) {
+    // Focus took even if a focus handler then moved it elsewhere or blurred.
     return true;
   }
   // No focus event reaches the document when the window doesn't have system
   // focus (browsers defer it until it does) or when focus moves within the
-  // same shadow root, even though the element became the active element.
-  const root = getHoistableRoot(element);
+  // same shadow root.
+  const activeElementAfter = getActiveElementOfRoot(root);
+  return (
+    // The element took focus, or already had it inside a shadow root, where
+    // the ownerDocument check above only sees the shadow host.
+    activeElementAfter === element ||
+    // Focus was delegated to another element, like a <label>'s control.
+    activeElementAfter !== activeElementBefore
+  );
+}
+
+function getActiveElementOfRoot(root: HoistableRoot): null | Element {
   if (root.nodeType === DOCUMENT_NODE) {
-    return (root as any as Document).activeElement === element;
+    return (root as any as Document).activeElement;
   }
   // getHoistableRoot types every DocumentFragment as a ShadowRoot, but only a
   // real one has a host and an activeElement.
   if ('host' in root) {
     // $FlowFixMe[prop-missing] Flow's ShadowRoot is missing activeElement.
-    return root.activeElement === element;
+    return root.activeElement;
   }
-  return false;
+  return null;
 }
 
 type RectRatio = {

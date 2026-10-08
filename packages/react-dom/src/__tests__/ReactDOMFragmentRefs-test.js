@@ -54,7 +54,8 @@ function loadModules() {
 // (document.hasFocus() === false), still moves document.activeElement on
 // element.focus() but defers focus/blur events until the window is focused.
 // jsdom dispatches them synchronously, so swallow them at the window before
-// any other listener can observe them.
+// any other listener can observe them. jsdom also doesn't delegate
+// label.focus() to the labeled control like browsers do.
 function emulateUnfocusedWindow() {
   const eventTypes = ['focus', 'focusin', 'blur', 'focusout'];
   const deferredFocusTargets = [];
@@ -70,9 +71,13 @@ function emulateUnfocusedWindow() {
   eventTypes.forEach(type => window.addEventListener(type, swallow, true));
   const originalFocus = HTMLElement.prototype.focus;
   HTMLElement.prototype.focus = function (options) {
+    const target =
+      this instanceof HTMLLabelElement && this.control !== null
+        ? this.control
+        : this;
     isSwallowing = true;
     try {
-      originalFocus.call(this, options);
+      originalFocus.call(target, options);
     } finally {
       isSwallowing = false;
     }
@@ -609,6 +614,39 @@ describe('FragmentRefs', () => {
         expect(shadowRoot.activeElement.id).toEqual('child-b');
         shadowRoot.activeElement.blur();
       });
+
+      it('stops at the control of a non-adjacent label when the window does not have focus', async () => {
+        const fragmentRef = React.createRef();
+        const root = ReactDOMClient.createRoot(container);
+
+        await act(() => {
+          root.render(
+            <Fragment ref={fragmentRef}>
+              <label id="label" htmlFor="labelled">
+                Label
+              </label>
+              <button id="between">Between</button>
+              <input id="labelled" />
+              <a id="after" href="/">
+                After
+              </a>
+            </Fragment>,
+          );
+        });
+
+        const unfocusedWindow = emulateUnfocusedWindow();
+        try {
+          await act(() => {
+            fragmentRef.current.focus();
+          });
+          expect(document.hasFocus()).toBe(false);
+          expect(document.activeElement.id).toEqual('labelled');
+          expect(unfocusedWindow.deferredFocusTargets).toEqual(['labelled']);
+        } finally {
+          unfocusedWindow.restore();
+        }
+        document.activeElement.blur();
+      });
     });
 
     describe('focusLast()', () => {
@@ -746,6 +784,39 @@ describe('FragmentRefs', () => {
         });
         expect(shadowRoot.activeElement.id).toEqual('child-c');
         shadowRoot.activeElement.blur();
+      });
+
+      it('stops at the control of a non-adjacent label when the window does not have focus', async () => {
+        const fragmentRef = React.createRef();
+        const root = ReactDOMClient.createRoot(container);
+
+        await act(() => {
+          root.render(
+            <Fragment ref={fragmentRef}>
+              <a id="before" href="/">
+                Before
+              </a>
+              <input id="labelled" type="checkbox" />
+              <button id="between">Between</button>
+              <label id="label" htmlFor="labelled">
+                Label
+              </label>
+            </Fragment>,
+          );
+        });
+
+        const unfocusedWindow = emulateUnfocusedWindow();
+        try {
+          await act(() => {
+            fragmentRef.current.focusLast();
+          });
+          expect(document.hasFocus()).toBe(false);
+          expect(document.activeElement.id).toEqual('labelled');
+          expect(unfocusedWindow.deferredFocusTargets).toEqual(['labelled']);
+        } finally {
+          unfocusedWindow.restore();
+        }
+        document.activeElement.blur();
       });
     });
 
