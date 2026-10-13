@@ -184,6 +184,79 @@ describe('ReactDOMFragmentEventHandlers', () => {
   });
 
   // @gate enableFragmentEventHandlers
+  it('does not remount children when a top-level handler toggles between undefined and a function', async () => {
+    const childRef = React.createRef();
+    function Child({id}) {
+      React.useLayoutEffect(() => {
+        Scheduler.log('mount ' + id);
+        return () => Scheduler.log('unmount ' + id);
+      }, [id]);
+      return <button ref={id === 'a' ? childRef : null} />;
+    }
+    function Component({onClick}) {
+      // Unkeyed and returned at the top level, like refs this keeps a Fiber
+      // whenever an on* prop is present, even if its value is undefined.
+      return (
+        <Fragment onClick={onClick}>
+          <Child id="a" />
+          <Child id="b" />
+        </Fragment>
+      );
+    }
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => root.render(<Component onClick={undefined} />));
+    assertLog(['mount a', 'mount b']);
+    const button = childRef.current;
+
+    await act(() =>
+      root.render(<Component onClick={() => Scheduler.log('clicked')} />),
+    );
+    assertLog([]);
+    expect(childRef.current).toBe(button);
+    click(button);
+    assertLog(['clicked']);
+
+    await act(() => root.render(<Component onClick={undefined} />));
+    assertLog([]);
+    expect(childRef.current).toBe(button);
+    click(button);
+    assertLog([]);
+
+    await act(() =>
+      root.render(<Component onClick={() => Scheduler.log('clicked again')} />),
+    );
+    assertLog([]);
+    click(button);
+    assertLog(['clicked again']);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('does not remount children of a fragment that is the only child of a host element when its handler toggles', async () => {
+    function Child() {
+      React.useLayoutEffect(() => {
+        Scheduler.log('mount');
+        return () => Scheduler.log('unmount');
+      }, []);
+      return <span />;
+    }
+    function App({onClick}) {
+      return (
+        <div>
+          <Fragment onClick={onClick}>
+            <Child />
+          </Fragment>
+        </div>
+      );
+    }
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => root.render(<App onClick={undefined} />));
+    assertLog(['mount']);
+    await act(() => root.render(<App onClick={() => {}} />));
+    await act(() => root.render(<App onClick={undefined} />));
+    assertLog([]);
+  });
+
+  // @gate enableFragmentEventHandlers
   it('dispatches capture and bubble handlers in tree order', async () => {
     const childRef = React.createRef();
     const log = name => () => Scheduler.log(name);

@@ -65,6 +65,7 @@ import {
   createFiberFromPortal,
   createFiberFromThrow,
   fragmentHasEventHandlerProps,
+  fragmentHasEventHandlerPropKeys,
   isFragmentEventHandlerPropName,
 } from './ReactFiber';
 import {isCompatibleFamilyForHotReloading} from './ReactFiberHotReloading';
@@ -1905,7 +1906,7 @@ function createChildReconciler(
       newChild.props.ref === undefined &&
       !(
         enableFragmentEventHandlers &&
-        fragmentHasEventHandlerProps(newChild.props)
+        fragmentHasEventHandlerPropKeys(newChild.props)
       );
 
     if (isUnkeyedUnrefedTopLevelFragment) {

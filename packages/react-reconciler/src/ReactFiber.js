@@ -803,6 +803,20 @@ export function fragmentHasEventHandlerProps(props: Object): boolean {
   return false;
 }
 
+// Whether an unkeyed top-level Fragment should keep its Fiber. This checks for
+// the presence of an `on*` prop rather than its value so that a handler going
+// between undefined and a function (e.g. `onClick={cond ? fn : undefined}`)
+// doesn't switch between a Fragment Fiber and inlined children, which would
+// remount the children.
+export function fragmentHasEventHandlerPropKeys(props: Object): boolean {
+  for (const propKey in props) {
+    if (isFragmentEventHandlerPropName(propKey)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function isFragmentEventHandlerPropName(propKey: string): boolean {
   return (
     propKey.length > 2 &&
