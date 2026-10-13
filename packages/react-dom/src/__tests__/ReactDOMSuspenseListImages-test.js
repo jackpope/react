@@ -218,6 +218,39 @@ describe('ReactDOMSuspenseListImages', () => {
   });
 
   // @gate enableSuspenseList && enableSuspenseyImages && enableSuspenseListImages
+  it('only waits on an image for the timeout since it was first requested', async () => {
+    let fakeNow = 0;
+    const originalNow = performance.now;
+    performance.now = () => fakeNow;
+    function advanceTime(ms) {
+      fakeNow += ms;
+      jest.advanceTimersByTime(ms);
+    }
+    try {
+      const root = ReactDOMClient.createRoot(container);
+      renderInTransition(root, <Gallery images={['a', 'slow', 'c']} />);
+      await waitForAll(['[a]', '[slow]', '[c]']);
+
+      // The first row loads late, so the list retries and the second row
+      // starts waiting on a new element for the slow image.
+      advanceTime(700);
+      loadImage('a');
+      await waitForAll([]);
+
+      // We first started waiting on the slow image 800ms ago, so we stop
+      // waiting on it now rather than 800ms after the retry (at 1500ms).
+      advanceTime(150);
+      await waitForThrottledRetry();
+      expect(revealed()).toEqual(['a']);
+      // Timers are now at 1450ms.
+      await waitForThrottledRetry();
+      expect(revealed()).toEqual(['a', 'slow', 'c']);
+    } finally {
+      performance.now = originalNow;
+    }
+  });
+
+  // @gate enableSuspenseList && enableSuspenseyImages && enableSuspenseListImages
   it('reveals a row when its image fails to load', async () => {
     const root = ReactDOMClient.createRoot(container);
     renderInTransition(root, <Gallery images={['broken', 'b']} />);
