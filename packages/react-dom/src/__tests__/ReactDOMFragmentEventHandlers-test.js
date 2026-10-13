@@ -1031,6 +1031,23 @@ describe('ReactDOMFragmentEventHandlers', () => {
       });
 
       // @gate enableFragmentEventHandlers
+      it('does not count the empty corner between diagonal children', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+        // B wraps onto a second row, below and to the right of A.
+        refs.b.current.getClientRects = () => [
+          {left: 120, right: 220, top: 60, bottom: 110, width: 100, height: 50},
+        ];
+
+        outAt(refs.outside.current, refs.a.current, ON_A);
+        assertLog(['fragment enter target=a related=outside']);
+        // Right of A and above B, with no child on the other side.
+        outAt(refs.a.current, refs.parent.current, [170, 25]);
+        assertLog(['fragment leave target=a related=parent']);
+      });
+
+      // @gate enableFragmentEventHandlers
       it('does not count portaled children as part of the region', async () => {
         const portalContainer = document.createElement('div');
         document.body.appendChild(portalContainer);
