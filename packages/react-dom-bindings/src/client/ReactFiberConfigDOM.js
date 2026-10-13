@@ -121,6 +121,7 @@ import {
   enableMoveBefore,
   disableCommentsAsDOMContainers,
   enableSuspenseyImages,
+  enableSuspenseListImages,
   enableSrcObject,
   enableViewTransition,
   enableHydrationChangeEvent,
@@ -3048,7 +3049,9 @@ function normalizeListenerOptions(
     return `c=${opts ? '1' : '0'}`;
   }
 
-  return `c=${opts.capture ? '1' : '0'}&o=${opts.once ? '1' : '0'}&p=${opts.passive ? '1' : '0'}`;
+  return `c=${opts.capture ? '1' : '0'}&o=${opts.once ? '1' : '0'}&p=${
+    opts.passive ? '1' : '0'
+  }`;
 }
 function indexOfEventListener(
   eventListeners: Array<StoredEventListener>,
@@ -6131,7 +6134,53 @@ export function preloadInstance(
   // If we return true here, we'll still get a suspendInstance call in the
   // pre-commit phase to determine if we still need to decode the image or
   // if was dropped from cache. This just avoids rendering Suspense fallback.
-  return !!(instance: any).complete;
+  if ((instance: any).complete) {
+    return true;
+  }
+  if (enableSuspenseListImages) {
+    const key = getSuspenseyImageKey(props);
+    return key !== null && settledSuspenseyImages.has(key);
+  }
+  return false;
+}
+
+// Images that we already waited on, either until they loaded or errored
+// ('loaded'), or until we gave up on them ('expired'). A new <img> for the same
+// image isn't necessarily `complete` right away, e.g. when it uses srcset, and
+// we don't want to block on it again.
+const settledSuspenseyImages: Map<string, 'loaded' | 'expired'> = new Map();
+const SETTLED_SUSPENSEY_IMAGES_LIMIT = 1000;
+
+function getSuspenseyImageKey(props: Props): null | string {
+  const {src, srcSet, sizes} = (props: any);
+  if (typeof src !== 'string') {
+    // E.g. a Blob. We don't remember these.
+    return null;
+  }
+  return (
+    src +
+    ' ' +
+    (typeof srcSet === 'string' ? srcSet : '') +
+    ' ' +
+    (typeof sizes === 'string' ? sizes : '')
+  );
+}
+
+function markSuspenseyImageSettled(
+  key: null | string,
+  status: 'loaded' | 'expired',
+): void {
+  if (key === null || settledSuspenseyImages.get(key) === 'loaded') {
+    return;
+  }
+  settledSuspenseyImages.delete(key);
+  settledSuspenseyImages.set(key, status);
+  if (settledSuspenseyImages.size > SETTLED_SUSPENSEY_IMAGES_LIMIT) {
+    const oldestKey = settledSuspenseyImages.keys().next().value;
+    if (oldestKey !== undefined) {
+      settledSuspenseyImages.delete(oldestKey);
+    }
+  }
 }
 
 export function preloadResource(resource: Resource): boolean {
@@ -6153,6 +6202,7 @@ export opaque type SuspendedState = {
   imgCount: number, // suspensey images pending to load
   imgBytes: number, // number of bytes we estimate needing to download
   suspenseyImages: Array<HTMLImageElement>, // instances of suspensey images (whether loaded or not)
+  suspenseyImageKeys: Array<null | string>, // settledSuspenseyImages keys, matching suspenseyImages
   waitingForImages: boolean, // false when we're no longer blocking on images
   waitingForViewTransition: boolean,
   unsuspend: null | (() => void),
@@ -6165,6 +6215,7 @@ export function startSuspendingCommit(): SuspendedState {
     imgCount: 0,
     imgBytes: 0,
     suspenseyImages: [],
+    suspenseyImageKeys: [],
     waitingForImages: true,
     waitingForViewTransition: false,
     // We use a noop function when we begin suspending because if possible we want the
@@ -6201,6 +6252,15 @@ export function suspendInstance(
     // If this browser supports decode() API, we use it to suspend waiting on the image.
     // The loading should have already started at this point, so it should be enough to
     // just call decode() which should also wait for the data to finish loading.
+    const key = enableSuspenseListImages ? getSuspenseyImageKey(props) : null;
+    if (
+      key !== null &&
+      !(instance: any).complete &&
+      settledSuspenseyImages.get(key) === 'expired'
+    ) {
+      // We already gave up waiting on this image once.
+      return;
+    }
     state.imgCount++;
     // Estimate the byte size that we're about to download based on the width/height
     // specified in the props. This is best practice to know ahead of time but if it's
@@ -6208,10 +6268,22 @@ export function suspendInstance(
     if (!(instance: any).complete) {
       state.imgBytes += estimateImageBytes((instance: any));
       state.suspenseyImages.push((instance: any));
+      if (enableSuspenseListImages) {
+        state.suspenseyImageKeys.push(key);
+      }
     }
     const ping = onUnsuspendImg.bind(state);
-    // $FlowFixMe[prop-missing]
-    instance.decode().then(ping, ping);
+    if (enableSuspenseListImages) {
+      const settle = () => {
+        markSuspenseyImageSettled(key, 'loaded');
+        ping();
+      };
+      // $FlowFixMe[prop-missing]
+      instance.decode().then(settle, settle);
+    } else {
+      // $FlowFixMe[prop-missing]
+      instance.decode().then(ping, ping);
+    }
   }
 }
 
@@ -6374,6 +6446,15 @@ export function waitForCommitToBeReady(
       const imgTimer = setTimeout(() => {
         // We're no longer blocked on images. If CSS resolves after this we can commit.
         state.waitingForImages = false;
+        if (enableSuspenseListImages) {
+          const images = state.suspenseyImages;
+          const keys = state.suspenseyImageKeys;
+          for (let i = 0; i < keys.length; i++) {
+            if (!images[i].complete) {
+              markSuspenseyImageSettled(keys[i], 'expired');
+            }
+          }
+        }
         if (state.count === 0) {
           if (state.stylesheets) {
             insertSuspendedStylesheets(state, state.stylesheets);
