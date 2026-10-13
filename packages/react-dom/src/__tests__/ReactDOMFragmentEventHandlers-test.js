@@ -18,6 +18,7 @@ let Scheduler;
 let act;
 let assertLog;
 let waitFor;
+let waitForAll;
 let assertConsoleErrorDev;
 let container;
 
@@ -65,6 +66,7 @@ describe('ReactDOMFragmentEventHandlers', () => {
     act = InternalTestUtils.act;
     assertLog = InternalTestUtils.assertLog;
     waitFor = InternalTestUtils.waitFor;
+    waitForAll = InternalTestUtils.waitForAll;
     assertConsoleErrorDev = InternalTestUtils.assertConsoleErrorDev;
 
     container = document.createElement('div');
@@ -561,6 +563,106 @@ describe('ReactDOMFragmentEventHandlers', () => {
 
     click(container.querySelector('#button'));
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('dispatches a discrete event to a fragment in a dehydrated boundary after synchronously hydrating it', async () => {
+    const Suspense = React.Suspense;
+    function Child({text}) {
+      Scheduler.log(text);
+      return (
+        <Fragment
+          onClickCapture={() => Scheduler.log('Fragment capture ' + text)}
+          onClick={() => Scheduler.log('Fragment clicked ' + text)}>
+          <span onClick={() => Scheduler.log('Clicked ' + text)}>{text}</span>
+        </Fragment>
+      );
+    }
+    function App() {
+      Scheduler.log('App');
+      return (
+        <div>
+          <Suspense fallback="Loading...">
+            <Child text="A" />
+          </Suspense>
+          <Suspense fallback="Loading...">
+            <Child text="B" />
+          </Suspense>
+        </div>
+      );
+    }
+
+    container.innerHTML = ReactDOMServer.renderToString(<App />);
+    assertLog(['App', 'A', 'B']);
+    const spanB = container.getElementsByTagName('span')[1];
+
+    ReactDOMClient.hydrateRoot(container, <App />);
+    assertLog([]);
+
+    // Clicking the dehydrated content synchronously hydrates the root and
+    // the boundary around B, then dispatches to the hydrated handlers.
+    click(spanB);
+    assertLog([
+      'App',
+      'B',
+      'Fragment capture B',
+      'Clicked B',
+      'Fragment clicked B',
+    ]);
+
+    await waitForAll(['A']);
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('replays a continuous event to a fragment once its boundary hydrates', async () => {
+    const Suspense = React.Suspense;
+    let suspend = false;
+    let resolve;
+    const promise = new Promise(resolvePromise => (resolve = resolvePromise));
+    function Child({text}) {
+      if (suspend && text === 'A') {
+        throw promise;
+      }
+      Scheduler.log(text);
+      return (
+        <Fragment onMouseEnter={() => Scheduler.log('Fragment enter ' + text)}>
+          <span onMouseEnter={() => Scheduler.log('Enter ' + text)}>
+            {text}
+          </span>
+        </Fragment>
+      );
+    }
+    function App() {
+      Scheduler.log('App');
+      return (
+        <div>
+          <Suspense fallback="Loading...">
+            <Child text="A" />
+          </Suspense>
+          <Suspense fallback="Loading...">
+            <Child text="B" />
+          </Suspense>
+        </div>
+      );
+    }
+
+    container.innerHTML = ReactDOMServer.renderToString(<App />);
+    assertLog(['App', 'A', 'B']);
+    const spanA = container.getElementsByTagName('span')[0];
+
+    suspend = true;
+    ReactDOMClient.hydrateRoot(container, <App />);
+    assertLog([]);
+
+    await act(() => {
+      // A can't hydrate yet, so the event is queued for replay.
+      mouseOver(spanA, null);
+      suspend = false;
+      resolve();
+    });
+
+    // The hovered boundary hydrates first, then the queued event is replayed.
+    assertLog(['App', 'A', 'Fragment enter A', 'Enter A', 'B']);
   });
 
   describe('enter and leave', () => {
