@@ -109,7 +109,13 @@ function Gallery({run, revealOrder, tail, slow, broken, useViewTransition}) {
       {revealOrder === 'none' ? (
         cards
       ) : (
-        <SuspenseList revealOrder={revealOrder} tail={tail}>
+        <SuspenseList
+          revealOrder={revealOrder}
+          tail={
+            revealOrder === 'forwards' || revealOrder === 'backwards'
+              ? tail
+              : undefined
+          }>
           {cards}
         </SuspenseList>
       )}
