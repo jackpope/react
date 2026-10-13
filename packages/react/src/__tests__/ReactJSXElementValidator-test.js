@@ -221,9 +221,13 @@ describe('ReactJSXElementValidator', () => {
       root.render(<Foo />);
     });
     assertConsoleErrorDev([
-      'Invalid prop `a` supplied to `React.Fragment`. React.Fragment ' +
-        'can only have `key`, `ref`, and `children` props.\n' +
-        '    in Foo (at **)',
+      gate(flags => flags.enableFragmentEventHandlers)
+        ? 'Invalid prop `a` supplied to `React.Fragment`. React.Fragment ' +
+          'can only have `key`, `ref`, `children`, and event handler props.\n' +
+          '    in Foo (at **)'
+        : 'Invalid prop `a` supplied to `React.Fragment`. React.Fragment ' +
+          'can only have `key`, `ref`, and `children` props.\n' +
+          '    in Foo (at **)',
     ]);
   });
 

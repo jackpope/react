@@ -53,6 +53,7 @@ import {
   enableAsyncIterableChildren,
   disableLegacyMode,
   enableOptimisticKey,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 
 import {
@@ -63,6 +64,8 @@ import {
   createFiberFromText,
   createFiberFromPortal,
   createFiberFromThrow,
+  fragmentHasEventHandlerProps,
+  isFragmentEventHandlerPropName,
 } from './ReactFiber';
 import {isCompatibleFamilyForHotReloading} from './ReactFiberHotReloading';
 import {getIsHydrating} from './ReactFiberHydrationContext';
@@ -239,7 +242,12 @@ function validateFragmentProps(
     const keys = Object.keys(element.props);
     for (let i = 0; i < keys.length; i++) {
       const key = keys[i];
-      if (key !== 'children' && key !== 'key' && key !== 'ref') {
+      if (
+        key !== 'children' &&
+        key !== 'key' &&
+        key !== 'ref' &&
+        !(enableFragmentEventHandlers && isFragmentEventHandlerPropName(key))
+      ) {
         if (fiber === null) {
           // For unkeyed root fragments without refs, there's no Fiber.
           // We create a fake one just for error stack handling.
@@ -252,17 +260,45 @@ function validateFragmentProps(
         runWithFiberInDEV(
           fiber,
           erroredKey => {
-            console.error(
-              'Invalid prop `%s` supplied to `React.Fragment`. ' +
-                'React.Fragment can only have `key`, `ref`, and `children` props.',
-              erroredKey,
-            );
+            if (enableFragmentEventHandlers) {
+              console.error(
+                'Invalid prop `%s` supplied to `React.Fragment`. ' +
+                  'React.Fragment can only have `key`, `ref`, `children`, ' +
+                  'and event handler props.',
+                erroredKey,
+              );
+            } else {
+              console.error(
+                'Invalid prop `%s` supplied to `React.Fragment`. ' +
+                  'React.Fragment can only have `key`, `ref`, and `children` props.',
+                erroredKey,
+              );
+            }
           },
           key,
         );
         break;
       }
     }
+  }
+}
+
+// Returns what a Fragment fiber should store as its pending props. See
+// fragmentHasEventHandlerProps for why the shape depends on the props.
+function getFragmentPendingProps(element: ReactElement): any {
+  const props = element.props;
+  if (enableFragmentEventHandlers && fragmentHasEventHandlerProps(props)) {
+    return props;
+  }
+  return props.children;
+}
+
+function markFragmentPropsShape(
+  fiber: Fiber,
+  hasEventHandlerProps: boolean,
+): void {
+  if (enableFragmentEventHandlers) {
+    fiber.elementType = hasEventHandlerProps ? REACT_FRAGMENT_TYPE : null;
   }
 }
 
@@ -572,12 +608,14 @@ function createChildReconciler(
   ): Fiber {
     const elementType = element.type;
     if (elementType === REACT_FRAGMENT_TYPE) {
+      const fragmentProps = getFragmentPendingProps(element);
       const updated = updateFragment(
         returnFiber,
         current,
-        element.props.children,
+        fragmentProps,
         lanes,
         element.key,
+        fragmentProps === element.props,
       );
       coerceRef(updated, element);
       validateFragmentProps(element, updated, returnFiber);
@@ -660,6 +698,7 @@ function createChildReconciler(
     fragment: Iterable<React$Node>,
     lanes: Lanes,
     key: ReactKey,
+    hasEventHandlerProps: boolean,
   ): Fiber {
     if (current === null || current.tag !== Fragment) {
       // Insert
@@ -669,6 +708,7 @@ function createChildReconciler(
         lanes,
         key,
       );
+      markFragmentPropsShape(created, hasEventHandlerProps);
       created.return = returnFiber;
       if (__DEV__) {
         // We treat the parent as the owner for stack purposes.
@@ -680,6 +720,7 @@ function createChildReconciler(
     } else {
       // Update
       const existing = useFiber(current, fragment);
+      markFragmentPropsShape(existing, hasEventHandlerProps);
       if (enableOptimisticKey) {
         // If the old key was optimistic we need to now save the real one.
         existing.key = key;
@@ -920,6 +961,7 @@ function createChildReconciler(
           newChild,
           lanes,
           null,
+          false,
         );
         currentDebugInfo = prevDebugInfo;
         return updated;
@@ -1052,6 +1094,7 @@ function createChildReconciler(
           newChild,
           lanes,
           null,
+          false,
         );
         currentDebugInfo = prevDebugInfo;
         return updated;
@@ -1704,7 +1747,9 @@ function createChildReconciler(
         if (elementType === REACT_FRAGMENT_TYPE) {
           if (child.tag === Fragment) {
             deleteRemainingChildren(returnFiber, child.sibling);
-            const existing = useFiber(child, element.props.children);
+            const fragmentProps = getFragmentPendingProps(element);
+            const existing = useFiber(child, fragmentProps);
+            markFragmentPropsShape(existing, fragmentProps === element.props);
             if (enableOptimisticKey) {
               // If the old key was optimistic we need to now save the real one.
               existing.key = key;
@@ -1759,12 +1804,14 @@ function createChildReconciler(
     }
 
     if (element.type === REACT_FRAGMENT_TYPE) {
+      const fragmentProps = getFragmentPendingProps(element);
       const created = createFiberFromFragment(
-        element.props.children,
+        fragmentProps,
         returnFiber.mode,
         lanes,
         element.key,
       );
+      markFragmentPropsShape(created, fragmentProps === element.props);
       coerceRef(created, element);
       created.return = returnFiber;
       if (__DEV__) {
@@ -1845,7 +1892,7 @@ function createChildReconciler(
     // not as a fragment. Nested arrays on the other hand will be treated as
     // fragment nodes. Recursion happens at the normal flow.
 
-    // Handle top level unkeyed fragments without refs
+    // Handle top level unkeyed fragments without refs or event handlers
     // as if they were arrays. This leads to an ambiguity between <>{[...]}</> and <>...</>.
     // We treat the ambiguous cases above the same.
     // We don't use recursion here because a fragment inside a fragment
@@ -1855,7 +1902,11 @@ function createChildReconciler(
       newChild !== null &&
       newChild.type === REACT_FRAGMENT_TYPE &&
       newChild.key === null &&
-      newChild.props.ref === undefined;
+      newChild.props.ref === undefined &&
+      !(
+        enableFragmentEventHandlers &&
+        fragmentHasEventHandlerProps(newChild.props)
+      );
 
     if (isUnkeyedUnrefedTopLevelFragment) {
       validateFragmentProps(newChild, null, returnFiber);

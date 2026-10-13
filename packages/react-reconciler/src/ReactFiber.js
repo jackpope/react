@@ -45,6 +45,7 @@ import {
   enableViewTransition,
   enableSuspenseyImages,
   enableOptimisticKey,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import {NoFlags, Placement, StaticMask} from './ReactFiberFlags';
 import {ConcurrentRoot} from './ReactRootTags';
@@ -594,6 +595,19 @@ export function createFiberFromTypeAndProps(
         return createFiberFromActivity(pendingProps, mode, lanes, key);
       // $FlowFixMe[invalid-compare]
       case REACT_FRAGMENT_TYPE:
+        if (
+          enableFragmentEventHandlers &&
+          fragmentHasEventHandlerProps(pendingProps)
+        ) {
+          const fragmentFiber = createFiberFromFragment(
+            pendingProps,
+            mode,
+            lanes,
+            key,
+          );
+          fragmentFiber.elementType = REACT_FRAGMENT_TYPE;
+          return fragmentFiber;
+        }
         return createFiberFromFragment(pendingProps.children, mode, lanes, key);
       // $FlowFixMe[invalid-compare]
       case REACT_STRICT_MODE_TYPE:
@@ -770,6 +784,37 @@ export function createFiberFromFragment(
   const fiber = createFiber(Fragment, elements, key, mode);
   fiber.lanes = lanes;
   return fiber;
+}
+
+// Fragment fibers normally store only their children as props. A Fragment
+// element with event handler props instead stores its full props object and
+// is marked with `elementType === REACT_FRAGMENT_TYPE` so that BeginWork and
+// the commit phase can tell the two shapes apart. Implicit fragments (arrays,
+// iterables, Suspense fallback wrappers) are never marked.
+export function fragmentHasEventHandlerProps(props: Object): boolean {
+  for (const propKey in props) {
+    if (
+      isFragmentEventHandlerPropName(propKey) &&
+      props[propKey] !== undefined
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function isFragmentEventHandlerPropName(propKey: string): boolean {
+  return (
+    propKey.length > 2 &&
+    propKey.charCodeAt(0) === 111 /* o */ &&
+    propKey.charCodeAt(1) === 110 /* n */ &&
+    propKey.charCodeAt(2) >= 65 /* A */ &&
+    propKey.charCodeAt(2) <= 90 /* Z */
+  );
+}
+
+export function getFragmentEventHandlerProps(fiber: Fiber): null | Object {
+  return fiber.elementType === REACT_FRAGMENT_TYPE ? fiber.memoizedProps : null;
 }
 
 function createFiberFromScope(

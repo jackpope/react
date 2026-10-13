@@ -119,6 +119,7 @@ import {
   enableCPUSuspense,
   disableLegacyMode,
   enableViewTransition,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import shallowEqual from 'shared/shallowEqual';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
@@ -129,6 +130,7 @@ import {
   REACT_FORWARD_REF_TYPE,
   REACT_MEMO_TYPE,
   REACT_CONTEXT_TYPE,
+  REACT_FRAGMENT_TYPE,
 } from 'shared/ReactSymbols';
 import {REACT_RECOVERABLE_DIGEST} from 'shared/ReactRecoverable';
 import {setCurrentFiber} from './ReactCurrentFiber';
@@ -1364,7 +1366,22 @@ function updateFragment(
   workInProgress: Fiber,
   renderLanes: Lanes,
 ) {
-  const nextChildren = workInProgress.pendingProps;
+  let nextChildren = workInProgress.pendingProps;
+  if (enableFragmentEventHandlers) {
+    if (workInProgress.elementType === REACT_FRAGMENT_TYPE) {
+      // This Fragment has event handler props, so pendingProps is the full
+      // props object. Schedule an Update so the commit phase stores the
+      // handlers on the FragmentInstance (creating it if needed).
+      nextChildren = workInProgress.pendingProps.children;
+      workInProgress.flags |= Update;
+    } else if (
+      current !== null &&
+      current.elementType === REACT_FRAGMENT_TYPE
+    ) {
+      // Event handlers were removed. Clear them from the FragmentInstance.
+      workInProgress.flags |= Update;
+    }
+  }
   markRef(current, workInProgress);
   reconcileChildren(current, workInProgress, nextChildren, renderLanes);
   return workInProgress.child;
