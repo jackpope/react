@@ -374,3 +374,16 @@ export function validateProperties(type, props, eventRegistry) {
   }
   warnUnknownProperties(type, props, eventRegistry);
 }
+
+// Fragments only accept `on*` props in addition to `key`, `ref`, and
+// `children`, which the reconciler validates. This applies the same event
+// handler name warnings that host elements get.
+export function validateFragmentEventHandlerProperties(props, eventRegistry) {
+  if (__DEV__) {
+    for (const key in props) {
+      if (EVENT_NAME_REGEX.test(key)) {
+        validateProperty('', key, props[key], eventRegistry);
+      }
+    }
+  }
+}

@@ -60,7 +60,10 @@ import getAttributeAlias from '../shared/getAttributeAlias';
 import possibleStandardNames from '../shared/possibleStandardNames';
 import {validateProperties as validateARIAProperties} from '../shared/ReactDOMInvalidARIAHook';
 import {validateProperties as validateInputProperties} from '../shared/ReactDOMNullInputValuePropHook';
-import {validateProperties as validateUnknownProperties} from '../shared/ReactDOMUnknownPropertyHook';
+import {
+  validateProperties as validateUnknownProperties,
+  validateFragmentEventHandlerProperties,
+} from '../shared/ReactDOMUnknownPropertyHook';
 import sanitizeURL from '../shared/sanitizeURL';
 
 import noop from 'shared/noop';
@@ -111,6 +114,15 @@ function validatePropertiesInDevelopment(type: string, props: any) {
           'probably not intentional.',
       );
     }
+  }
+}
+
+export function validateFragmentPropertiesInDevelopment(props: Object) {
+  if (__DEV__) {
+    validateFragmentEventHandlerProperties(props, {
+      registrationNameDependencies,
+      possibleRegistrationNames,
+    });
   }
 }
 

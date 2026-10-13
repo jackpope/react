@@ -130,6 +130,60 @@ describe('ReactDOMFragmentEventHandlers', () => {
   });
 
   // @gate enableFragmentEventHandlers
+  it('warns about unknown event handler props like host elements do', async () => {
+    function App({onFoo}) {
+      return (
+        <div>
+          <Fragment
+            onFoo={onFoo}
+            onDblClick={() => {}}
+            onClickcapture={() => {}}
+            onFocusIn={() => {}}>
+            <span />
+          </Fragment>
+        </div>
+      );
+    }
+    const root = ReactDOMClient.createRoot(container);
+    await act(() => root.render(<App onFoo={() => {}} />));
+    assertConsoleErrorDev([
+      'Unknown event handler property `onFoo`. It will be ignored.\n' +
+        '    in App (at **)',
+      'Invalid event handler property `onDblClick`. Did you mean `onDoubleClick`?\n' +
+        '    in App (at **)',
+      'Invalid event handler property `onClickcapture`. Did you mean `onClickCapture`?\n' +
+        '    in App (at **)',
+      'React uses onFocus and onBlur instead of onFocusIn and onFocusOut. ' +
+        'All React events are normalized to bubble, so onFocusIn and onFocusOut ' +
+        'are not needed/supported by React.\n' +
+        '    in App (at **)',
+    ]);
+
+    // Like host elements, each name only warns once.
+    await act(() => root.render(<App onFoo={() => {}} />));
+  });
+
+  // @gate enableFragmentEventHandlers
+  it('warns about unknown event handler props the same way for fragments and host elements', async () => {
+    const root = ReactDOMClient.createRoot(container);
+    await act(() =>
+      root.render(
+        <div>
+          <Fragment onBar={() => {}}>
+            <span />
+          </Fragment>
+          <span onBaz={() => {}} />
+        </div>,
+      ),
+    );
+    assertConsoleErrorDev([
+      'Unknown event handler property `onBaz`. It will be ignored.\n' +
+        '    in span (at **)',
+      'Unknown event handler property `onBar`. It will be ignored.',
+    ]);
+  });
+
+  // @gate enableFragmentEventHandlers
   it('dispatches capture and bubble handlers in tree order', async () => {
     const childRef = React.createRef();
     const log = name => () => Scheduler.log(name);

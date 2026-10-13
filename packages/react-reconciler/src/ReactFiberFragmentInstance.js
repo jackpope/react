@@ -25,6 +25,7 @@ import {
   updateFragmentInstanceEventHandlers,
 } from './ReactFiberConfig';
 import {getFragmentEventHandlerProps} from './ReactFiber';
+import {runWithFiberInDEV} from './ReactCurrentFiber';
 
 // Syncs a Fragment's committed event handler props to its FragmentInstance so
 // the event system can read them at dispatch time. A FragmentInstance is
@@ -33,7 +34,7 @@ export function commitFragmentEventHandlers(finishedWork: Fiber): void {
   const props = getFragmentEventHandlerProps(finishedWork);
   const existingInstance: null | FragmentInstanceType = finishedWork.stateNode;
   if (existingInstance !== null) {
-    updateFragmentInstanceEventHandlers(existingInstance, props);
+    commitFragmentInstanceEventHandlers(finishedWork, existingInstance, props);
     return;
   }
   if (props === null) {
@@ -52,7 +53,25 @@ export function commitFragmentEventHandlers(finishedWork: Fiber): void {
   if (alternate !== null) {
     alternate.stateNode = instance;
   }
-  updateFragmentInstanceEventHandlers(instance, props);
+  commitFragmentInstanceEventHandlers(finishedWork, instance, props);
+}
+
+function commitFragmentInstanceEventHandlers(
+  finishedWork: Fiber,
+  instance: FragmentInstanceType,
+  props: null | Object,
+): void {
+  if (__DEV__) {
+    // Run with the Fiber so the host config's dev warnings get a stack.
+    runWithFiberInDEV(
+      finishedWork,
+      updateFragmentInstanceEventHandlers,
+      instance,
+      props,
+    );
+  } else {
+    updateFragmentInstanceEventHandlers(instance, props);
+  }
 }
 
 export function commitNewChildToFragmentInstances(

@@ -83,6 +83,7 @@ import type {SingletonType} from './ReactDOMComponent';
 import {
   setInitialProperties,
   updateProperties,
+  validateFragmentPropertiesInDevelopment,
   clearSingletonProperties,
   hydrateProperties,
   hydrateText,
@@ -3881,6 +3882,9 @@ export function updateFragmentInstanceEventHandlers(
   instance: FragmentInstanceType,
   props: null | {+[propKey: string]: mixed},
 ): void {
+  if (__DEV__ && props !== null) {
+    validateFragmentPropertiesInDevelopment(props);
+  }
   instance._eventHandlerProps = props;
 }
 
