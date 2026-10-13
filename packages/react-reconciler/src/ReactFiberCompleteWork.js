@@ -41,6 +41,7 @@ import {
   disableLegacyMode,
   enableViewTransition,
   enableSuspenseyImages,
+  enableSuspenseListImages,
 } from 'shared/ReactFeatureFlags';
 
 import {now} from './Scheduler';
@@ -96,7 +97,6 @@ import {
   MaySuspendCommit,
   ScheduleRetry,
   ShouldSuspendCommit,
-  SuspenseyCommitPending,
   Cloned,
   ViewTransitionStatic,
   Hydrate,
@@ -144,9 +144,15 @@ import {
   setShallowSuspenseListContext,
   ForceSuspenseFallback,
   setDefaultShallowSuspenseListContext,
+  setSuspenseListRowContext,
   hasSuspenseListContext,
-  InSuspenseList,
+  InSuspenseListBoundary,
+  PrewarmSuspenseFallback,
 } from './ReactFiberSuspenseContext';
+import {
+  getPendingSuspenseyInstancesWakeable,
+  includesSuspenseyInstancesWakeable,
+} from './ReactFiberSuspenseyWakeable';
 import {popHiddenContext} from './ReactFiberHiddenContext';
 import {findFirstSuspended} from './ReactFiberSuspenseComponent';
 import {
@@ -168,6 +174,7 @@ import {
 } from './ReactFiberHydrationContext';
 import {
   renderHasNotSuspendedYet,
+  renderDidSuspend,
   getRenderTargetTime,
   getWorkInProgressTransitions,
   shouldRemainOnPreviousScreen,
@@ -557,14 +564,27 @@ function preloadInstanceAndSuspendIfNeeded(
   newProps: Props,
   renderLanes: Lanes,
 ) {
+  const suspenseyImagesEnabled =
+    enableSuspenseyImages ||
+    (workInProgress.mode & SuspenseyImagesMode) !== NoMode;
   const maySuspend =
-    (enableSuspenseyImages ||
-      (workInProgress.mode & SuspenseyImagesMode) !== NoMode) &&
+    suspenseyImagesEnabled &&
     (oldProps === null
       ? maySuspendCommit(type, newProps)
       : maySuspendCommitOnUpdate(type, oldProps, newProps));
 
   if (!maySuspend) {
+    if (
+      enableSuspenseListImages &&
+      suspenseyImagesEnabled &&
+      oldProps !== null &&
+      maySuspendCommit(type, newProps)
+    ) {
+      // Nothing changed that requires preloading, but keep the static flag.
+      // This instance may have been prerendered in a hidden tree and it still
+      // needs to be checked when that tree is revealed.
+      return;
+    }
     // If this flag was set previously, we can remove it. The flag
     // represents whether this particular set of props might ever need to
     // suspend. The safest thing to do is for maySuspendCommit to always
@@ -591,8 +611,17 @@ function preloadInstanceAndSuspendIfNeeded(
     // @TODO we should probably do the preload in begin work
     const isReady = preloadInstance(workInProgress.stateNode, type, newProps);
     if (!isReady) {
-      if (shouldRemainOnPreviousScreen()) {
-        workInProgress.flags |= ShouldSuspendCommit | SuspenseyCommitPending;
+      if (
+        shouldRemainOnPreviousScreen() ||
+        // Inside a SuspenseList, let the nearest boundary decide once its
+        // whole subtree has rendered, so that every image in it gets requested.
+        (enableSuspenseListImages &&
+          hasSuspenseListContext(
+            suspenseStackCursor.current,
+            InSuspenseListBoundary,
+          ))
+      ) {
+        workInProgress.flags |= ShouldSuspendCommit;
       } else {
         suspendCommit();
       }
@@ -1567,31 +1596,62 @@ function completeWork(
         // Continue with the normal Suspense path.
       }
 
-      // Read the SuspenseList context before popping
       const suspenseContext = suspenseStackCursor.current;
 
       popSuspenseHandler(workInProgress);
 
-      // If this Suspense boundary is inside a SuspenseList and has subtree
-      // resources that aren't ready, absorb the suspension. Set DidCapture
-      // to trigger a fallback re-render, preserving the primary tree as a
-      // hidden Offscreen (Activity). This allows per-boundary subscriptions
-      // to retry each boundary independently when its resources load.
       if (
+        enableSuspenseListImages &&
+        nextState === null &&
         (workInProgress.flags & DidCapture) === NoFlags &&
-        hasSuspenseListContext(suspenseContext, InSuspenseList) &&
-        (workInProgress.subtreeFlags & MaySuspendCommit) !== NoFlags &&
-        (workInProgress.subtreeFlags & SuspenseyCommitPending) !== NoFlags
+        hasSuspenseListContext(suspenseContext, InSuspenseListBoundary) &&
+        // Only boundaries that aren't already showing content. A visible
+        // boundary never goes back to its fallback because of an image.
+        (current === null ||
+          (current.memoizedState !== null &&
+            (current.memoizedState: SuspenseState).dehydrated === null))
       ) {
-        workInProgress.flags |= DidCapture;
-        workInProgress.lanes = renderLanes;
-        if (
-          enableProfilerTimer &&
-          (workInProgress.mode & ProfileMode) !== NoMode
-        ) {
-          transferActualDuration(workInProgress);
+        const isPrewarm = hasSuspenseListContext(
+          suspenseContext,
+          PrewarmSuspenseFallback,
+        );
+        const primaryChildFragment: Fiber = (workInProgress.child: any);
+        const wakeable = getPendingSuspenseyInstancesWakeable(
+          primaryChildFragment,
+          renderLanes,
+        );
+        if (wakeable !== null || isPrewarm) {
+          if (wakeable !== null && !isPrewarm) {
+            // This boundary's images aren't ready. Treat it as suspended so
+            // that the SuspenseList can coordinate it like a boundary waiting
+            // on data, and retry it once the renderer is done waiting on them.
+            // A prewarmed row doesn't need to be retried on its own. The list
+            // retries once the row that's blocking it is ready.
+            const retryQueue: RetryQueue | null =
+              (workInProgress.updateQueue: any);
+            if (retryQueue === null) {
+              workInProgress.updateQueue = (new Set([wakeable]): RetryQueue);
+            } else {
+              retryQueue.add(wakeable);
+            }
+            if (current === null) {
+              renderDidSuspend();
+            }
+          }
+          // We're going to render the fallback instead, so we no longer want to
+          // delete the current one. Normally unwinding resets this.
+          workInProgress.deletions = null;
+          workInProgress.flags &= ~ChildDeletion;
+          workInProgress.flags |= DidCapture;
+          workInProgress.lanes = renderLanes;
+          if (
+            enableProfilerTimer &&
+            (workInProgress.mode & ProfileMode) !== NoMode
+          ) {
+            transferActualDuration(workInProgress);
+          }
+          return workInProgress;
         }
-        return workInProgress;
       }
 
       if ((workInProgress.flags & DidCapture) !== NoFlags) {
@@ -1787,6 +1847,13 @@ function completeWork(
                   workInProgress.flags |= ScheduleRetry;
                 }
                 scheduleRetryEffect(workInProgress, retryQueue);
+                if (
+                  enableSuspenseListImages &&
+                  retryQueue !== null &&
+                  includesSuspenseyInstancesWakeable(retryQueue)
+                ) {
+                  renderState.prewarmTail = true;
+                }
 
                 // Rerender the whole list, but this time, we'll force fallbacks
                 // to stay in place.
@@ -1800,7 +1867,10 @@ function completeWork(
                 pushSuspenseListContext(
                   workInProgress,
                   setShallowSuspenseListContext(
-                    suspenseStackCursor.current,
+                    setSuspenseListRowContext(
+                      suspenseStackCursor.current,
+                      true,
+                    ),
                     ForceSuspenseFallback,
                   ),
                 );
@@ -1851,6 +1921,13 @@ function completeWork(
             const retryQueue: RetryQueue | null = (suspended.updateQueue: any);
             workInProgress.updateQueue = retryQueue;
             scheduleRetryEffect(workInProgress, retryQueue);
+            if (
+              enableSuspenseListImages &&
+              retryQueue !== null &&
+              includesSuspenseyInstancesWakeable(retryQueue)
+            ) {
+              renderState.prewarmTail = true;
+            }
 
             cutOffTailIfNeeded(renderState, true);
             // This might have been modified.
@@ -1922,11 +1999,16 @@ function completeWork(
         // Restore the context.
         // TODO: We can probably just avoid popping it instead and only
         // setting it the first time we go from not suspended to suspended.
-        let suspenseContext = suspenseStackCursor.current;
+        let suspenseContext = setSuspenseListRowContext(
+          suspenseStackCursor.current,
+          true,
+        );
         if (didSuspendAlready) {
           suspenseContext = setShallowSuspenseListContext(
             suspenseContext,
-            ForceSuspenseFallback,
+            enableSuspenseListImages && renderState.prewarmTail
+              ? PrewarmSuspenseFallback
+              : ForceSuspenseFallback,
           );
         } else {
           suspenseContext =

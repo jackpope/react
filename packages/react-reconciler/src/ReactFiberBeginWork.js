@@ -119,6 +119,7 @@ import {
   disableLegacyMode,
   enableViewTransition,
   enableFragmentRefs,
+  enableSuspenseListImages,
 } from 'shared/ReactFeatureFlags';
 import shallowEqual from 'shared/shallowEqual';
 import getComponentNameFromFiber from 'react-reconciler/src/getComponentNameFromFiber';
@@ -194,7 +195,8 @@ import {
   suspenseStackCursor,
   pushSuspenseListContext,
   ForceSuspenseFallback,
-  InSuspenseList,
+  PrewarmSuspenseFallback,
+  setSuspenseListRowContext,
   hasSuspenseListContext,
   setDefaultShallowSuspenseListContext,
   setShallowSuspenseListContext,
@@ -2319,9 +2321,18 @@ function shouldRemainOnFallback(
 
   // Not currently showing content. Consult the Suspense context.
   const suspenseContext: SuspenseContext = suspenseStackCursor.current;
-  return hasSuspenseListContext(
-    suspenseContext,
-    (ForceSuspenseFallback: SuspenseContext),
+  return (
+    hasSuspenseListContext(
+      suspenseContext,
+      (ForceSuspenseFallback: SuspenseContext),
+    ) ||
+    // An existing fallback was already prewarmed when it mounted.
+    (enableSuspenseListImages &&
+      current !== null &&
+      hasSuspenseListContext(
+        suspenseContext,
+        (PrewarmSuspenseFallback: SuspenseContext),
+      ))
   );
 }
 
@@ -3350,6 +3361,7 @@ function initSuspenseListRenderState(
       tail: tail,
       tailMode: tailMode,
       treeForkCount: treeForkCount,
+      prewarmTail: false,
     }: SuspenseListRenderState);
   } else {
     // We can reuse the existing object from previous renders.
@@ -3360,6 +3372,7 @@ function initSuspenseListRenderState(
     renderState.tail = tail;
     renderState.tailMode = tailMode;
     renderState.treeForkCount = treeForkCount;
+    renderState.prewarmTail = false;
   }
 }
 
@@ -3413,7 +3426,11 @@ function updateSuspenseListComponent(
   } else {
     suspenseContext = setDefaultShallowSuspenseListContext(suspenseContext);
   }
-  suspenseContext |= InSuspenseList;
+  suspenseContext = setSuspenseListRowContext(
+    suspenseContext,
+    revealOrder !== 'independent' &&
+      (disableLegacyMode || (workInProgress.mode & ConcurrentMode) !== NoMode),
+  );
   pushSuspenseListContext(workInProgress, suspenseContext);
 
   validateRevealOrder(revealOrder);

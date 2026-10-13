@@ -56,6 +56,9 @@ export type SuspenseListRenderState = {
   tailMode: SuspenseListTailMode,
   // Keep track of total number of forks during multiple passes
   treeForkCount: number,
+  // A row is waiting on suspensey images, so the rows after it should still
+  // render their content (to start loading their images) before falling back.
+  prewarmTail: boolean,
 };
 
 export type RetryQueue = Set<Wakeable>;

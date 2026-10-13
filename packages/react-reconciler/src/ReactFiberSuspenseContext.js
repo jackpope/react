@@ -12,7 +12,10 @@ import type {Fiber} from './ReactInternalTypes';
 import type {StackCursor} from './ReactFiberStack';
 import type {SuspenseState} from './ReactFiberSuspenseComponent';
 
-import {enableSuspenseAvoidThisFallback} from 'shared/ReactFeatureFlags';
+import {
+  enableSuspenseAvoidThisFallback,
+  enableSuspenseListImages,
+} from 'shared/ReactFeatureFlags';
 import {createCursor, push, pop} from './ReactFiberStack';
 import {isCurrentTreeHidden} from './ReactFiberHiddenContext';
 import {OffscreenComponent} from './ReactWorkTags';
@@ -48,11 +51,16 @@ export function pushPrimaryTreeSuspenseHandler(handler: Fiber): void {
   // Shallow Suspense context fields, like ForceSuspenseFallback, should only be
   // propagated a single level. For example, when ForceSuspenseFallback is set,
   // it should only force the nearest Suspense boundary into fallback mode.
-  push(
-    suspenseStackCursor,
-    setDefaultShallowSuspenseListContext(suspenseStackCursor.current),
-    handler,
+  let suspenseContext = setDefaultShallowSuspenseListContext(
+    suspenseStackCursor.current,
   );
+  if (enableSuspenseListImages && (suspenseContext & InSuspenseList) !== 0) {
+    suspenseContext |= InSuspenseListBoundary;
+    // Keep the prewarm bit for this boundary only, so that it can switch to its
+    // fallback once it completes. Nested boundaries reset it.
+    suspenseContext |= suspenseStackCursor.current & PrewarmSuspenseFallback;
+  }
+  push(suspenseStackCursor, suspenseContext, handler);
 
   // Experimental feature: Some Suspense boundaries are marked as having an
   // undesirable fallback state. These have special behavior where we only
@@ -168,15 +176,25 @@ export opaque type ShallowSuspenseContext: SuspenseContext = number;
 
 const DefaultSuspenseContext: SuspenseContext = 0b00;
 
-const SubtreeSuspenseContextMask: SuspenseContext = 0b101;
+const SubtreeSuspenseContextMask: SuspenseContext = 0b1101;
 
 // ForceSuspenseFallback can be used by SuspenseList to force newly added
 // items into their fallback state during one of the render passes.
 export const ForceSuspenseFallback: ShallowSuspenseContext = 0b10;
 
-// InSuspenseList indicates that a Suspense boundary is a direct child of
-// a SuspenseList. Used to enable per-boundary suspensey commit absorption.
+// Like ForceSuspenseFallback, but a newly mounted boundary first renders its
+// primary children (so that their images start loading) and then switches to
+// its fallback when it completes.
+export const PrewarmSuspenseFallback: ShallowSuspenseContext = 0b10000;
+
+// We're inside a SuspenseList that coordinates when its rows reveal (any
+// revealOrder other than "independent").
 export const InSuspenseList: SubtreeSuspenseContext = 0b100;
+
+// We're inside a Suspense boundary that is itself inside a coordinated
+// SuspenseList. Suspensey instances in here let that boundary decide whether
+// it's ready to reveal, instead of suspending the render or the commit.
+export const InSuspenseListBoundary: SubtreeSuspenseContext = 0b1000;
 
 export const suspenseStackCursor: StackCursor<SuspenseContext> = createCursor(
   DefaultSuspenseContext,
@@ -200,6 +218,21 @@ export function setShallowSuspenseListContext(
   shallowContext: ShallowSuspenseContext,
 ): SuspenseContext {
   return (parentContext & SubtreeSuspenseContextMask) | shallowContext;
+}
+
+// The context that the rows of a SuspenseList are rendered in. Rows start
+// outside of any boundary that belongs to this list.
+export function setSuspenseListRowContext(
+  parentContext: SuspenseContext,
+  isCoordinated: boolean,
+): SuspenseContext {
+  if (!enableSuspenseListImages) {
+    return parentContext;
+  }
+  const outsideBoundary = parentContext & ~InSuspenseListBoundary;
+  return isCoordinated
+    ? outsideBoundary | InSuspenseList
+    : outsideBoundary & ~InSuspenseList;
 }
 
 export function pushSuspenseListContext(
