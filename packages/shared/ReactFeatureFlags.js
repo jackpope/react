@@ -86,6 +86,12 @@ export const enableScrollEndPolyfill = __EXPERIMENTAL__;
 
 export const enableSuspenseyImages: boolean = false;
 
+// Inside a coordinated SuspenseList, treat a row boundary whose suspensey
+// images haven't loaded as suspended, so rows reveal in order as their images
+// load instead of all at once. Only has an effect where suspensey images are
+// enabled (enableSuspenseyImages, or inside a ViewTransition).
+export const enableSuspenseListImages = __EXPERIMENTAL__;
+
 export const enableFizzBlockingRender = __EXPERIMENTAL__; // rel="expect"
 
 export const enableSrcObject = __EXPERIMENTAL__;

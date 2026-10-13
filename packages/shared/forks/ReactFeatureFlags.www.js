@@ -29,6 +29,8 @@ export const {
   retryLaneExpirationMs,
   syncLaneExpirationMs,
   transitionLaneExpirationMs,
+  enableSuspenseyImages,
+  enableSuspenseListImages,
   enableViewTransition,
   enableScrollEndPolyfill,
   enableFragmentRefs,
@@ -102,7 +104,6 @@ export const enableEagerAlternateStateNodeCleanup: boolean = true;
 
 export const enableGestureTransition: boolean = false;
 
-export const enableSuspenseyImages: boolean = false;
 export const enableFizzBlockingRender: boolean = true;
 export const enableSrcObject: boolean = false;
 export const enableHydrationChangeEvent: boolean = false;

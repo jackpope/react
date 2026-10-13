@@ -64,6 +64,7 @@ export const enableViewTransition: boolean = true;
 export const enableGestureTransition: boolean = false;
 export const enableScrollEndPolyfill: boolean = true;
 export const enableSuspenseyImages: boolean = false;
+export const enableSuspenseListImages: boolean = false;
 export const enableFizzBlockingRender: boolean = true;
 export const enableSrcObject: boolean = false;
 export const enableHydrationChangeEvent: boolean = false;
