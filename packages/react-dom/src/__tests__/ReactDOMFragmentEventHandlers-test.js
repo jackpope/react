@@ -714,31 +714,251 @@ describe('ReactDOMFragmentEventHandlers', () => {
       ]);
     });
 
-    // @gate enableFragmentEventHandlers
-    it('treats the parent host node between children as outside the fragment', async () => {
-      const parentRef = React.createRef();
-      const aRef = React.createRef();
-      const bRef = React.createRef();
-      const log = name => () => Scheduler.log(name);
-      const root = ReactDOMClient.createRoot(container);
-      await act(() =>
-        root.render(
-          <div ref={parentRef}>
+    describe('gaps between children', () => {
+      function pointerOut(node, relatedTarget, pointerId) {
+        const event = new MouseEvent('pointerout', {
+          bubbles: true,
+          cancelable: true,
+          relatedTarget,
+        });
+        Object.defineProperty(event, 'pointerId', {value: pointerId});
+        node.dispatchEvent(event);
+      }
+
+      function renderGapTree(root, refs, extraChildren) {
+        const log = name => e =>
+          Scheduler.log(
+            `${name} target=${e.target.id || e.target.nodeName} related=${
+              e.relatedTarget === window
+                ? 'window'
+                : e.relatedTarget.id || e.relatedTarget.nodeName
+            }`,
+          );
+        return act(() =>
+          root.render(
+            <div
+              id="grandparent"
+              ref={refs.grandparent}
+              onMouseLeave={log('grandparent leave')}>
+              <div
+                id="parent"
+                ref={refs.parent}
+                onMouseEnter={log('parent enter')}
+                onMouseLeave={log('parent leave')}>
+                <Fragment
+                  onMouseEnter={log('fragment enter')}
+                  onMouseLeave={log('fragment leave')}
+                  onPointerEnter={log('fragment pointerenter')}
+                  onPointerLeave={log('fragment pointerleave')}>
+                  <div id="a" ref={refs.a} />
+                  <div id="b" ref={refs.b} />
+                </Fragment>
+                <div id="outside" ref={refs.outside} />
+                {extraChildren}
+              </div>
+            </div>,
+          ),
+        );
+      }
+
+      function createRefs() {
+        return {
+          grandparent: React.createRef(),
+          parent: React.createRef(),
+          a: React.createRef(),
+          b: React.createRef(),
+          outside: React.createRef(),
+        };
+      }
+
+      // @gate enableFragmentEventHandlers
+      it('does not fire when the pointer crosses the parent between children', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+
+        mouseOut(refs.outside.current, refs.a.current);
+        assertLog(['fragment enter target=a related=outside']);
+
+        // A -> gap (the parent) -> B
+        mouseOut(refs.a.current, refs.parent.current);
+        assertLog([]);
+        mouseOut(refs.parent.current, refs.b.current);
+        assertLog([]);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('fires leave when the pointer moves from the gap to a node outside the fragment', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+
+        mouseOut(refs.outside.current, refs.a.current);
+        assertLog(['fragment enter target=a related=outside']);
+
+        mouseOut(refs.a.current, refs.parent.current);
+        assertLog([]);
+        // The leave is dispatched with the gap as its target.
+        mouseOut(refs.parent.current, refs.outside.current);
+        assertLog(['fragment leave target=parent related=outside']);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('fires the fragment leave before its parent leave when exiting through the gap', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+
+        mouseOut(refs.a.current, refs.parent.current);
+        assertLog([]);
+        mouseOut(refs.parent.current, refs.grandparent.current);
+        assertLog([
+          'fragment leave target=parent related=grandparent',
+          'parent leave target=parent related=grandparent',
+        ]);
+
+        // Leaving the window from the gap.
+        mouseOut(refs.grandparent.current, refs.b.current);
+        assertLog([
+          'parent enter target=b related=grandparent',
+          'fragment enter target=b related=grandparent',
+        ]);
+        mouseOut(refs.b.current, refs.parent.current);
+        mouseOut(refs.parent.current, null);
+        assertLog([
+          'fragment leave target=parent related=window',
+          'parent leave target=parent related=window',
+          'grandparent leave target=parent related=window',
+        ]);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('does not treat the gap as inside when the pointer comes from outside', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+
+        mouseOut(refs.outside.current, refs.parent.current);
+        mouseOut(refs.parent.current, refs.outside.current);
+        assertLog([]);
+
+        mouseOut(refs.outside.current, refs.parent.current);
+        mouseOut(refs.parent.current, refs.a.current);
+        assertLog(['fragment enter target=a related=parent']);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('tracks each pointer separately', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+
+        // Pointer 1 is in the gap.
+        pointerOut(refs.a.current, refs.parent.current, 1);
+        assertLog([]);
+        // Pointer 2 enters B from outside and leaves through the parent's
+        // other child.
+        pointerOut(refs.outside.current, refs.b.current, 2);
+        assertLog(['fragment pointerenter target=b related=outside']);
+        pointerOut(refs.b.current, refs.outside.current, 2);
+        assertLog(['fragment pointerleave target=b related=outside']);
+        // Pointer 1 returns to the fragment without an enter.
+        pointerOut(refs.parent.current, refs.b.current, 1);
+        assertLog([]);
+        // Mouse events are tracked apart from pointer events.
+        mouseOut(refs.a.current, refs.parent.current);
+        mouseOut(refs.parent.current, refs.outside.current);
+        assertLog(['fragment leave target=parent related=outside']);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('does not fire leave for a fragment that unmounted while the pointer was in its gap', async () => {
+        const refs = createRefs();
+        const root = ReactDOMClient.createRoot(container);
+        await renderGapTree(root, refs);
+        mouseOut(refs.outside.current, refs.a.current);
+        assertLog(['fragment enter target=a related=outside']);
+        mouseOut(refs.a.current, refs.parent.current);
+        assertLog([]);
+
+        await act(() =>
+          root.render(
+            <div id="grandparent" ref={refs.grandparent}>
+              <div id="parent" ref={refs.parent}>
+                <div id="outside" ref={refs.outside} />
+              </div>
+            </div>,
+          ),
+        );
+        mouseOut(refs.parent.current, refs.outside.current);
+        assertLog([]);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('handles nested fragments that share a parent', async () => {
+        const parentRef = React.createRef();
+        const aRef = React.createRef();
+        const bRef = React.createRef();
+        const outsideRef = React.createRef();
+        const log = name => () => Scheduler.log(name);
+        const root = ReactDOMClient.createRoot(container);
+        await act(() =>
+          root.render(
+            <div ref={parentRef}>
+              <Fragment
+                onMouseEnter={log('outer enter')}
+                onMouseLeave={log('outer leave')}>
+                <Fragment
+                  onMouseEnter={log('inner enter')}
+                  onMouseLeave={log('inner leave')}>
+                  <div ref={aRef} />
+                </Fragment>
+                <div ref={bRef} />
+              </Fragment>
+              <div ref={outsideRef} />
+            </div>,
+          ),
+        );
+
+        mouseOut(outsideRef.current, aRef.current);
+        assertLog(['outer enter', 'inner enter']);
+        // Both fragments' leaves wait while the pointer is on the parent.
+        mouseOut(aRef.current, parentRef.current);
+        assertLog([]);
+        mouseOut(parentRef.current, bRef.current);
+        assertLog(['inner leave']);
+        mouseOut(bRef.current, parentRef.current);
+        mouseOut(parentRef.current, outsideRef.current);
+        assertLog(['outer leave']);
+      });
+
+      // @gate enableFragmentEventHandlers
+      it('treats the root container as the gap for a top-level fragment', async () => {
+        const aRef = React.createRef();
+        const bRef = React.createRef();
+        const log = name => () => Scheduler.log(name);
+        const root = ReactDOMClient.createRoot(container);
+        await act(() =>
+          root.render(
             <Fragment
               onMouseEnter={log('fragment enter')}
               onMouseLeave={log('fragment leave')}>
               <div ref={aRef} />
               <div ref={bRef} />
-            </Fragment>
-          </div>,
-        ),
-      );
+            </Fragment>,
+          ),
+        );
 
-      // The pointer crosses a gap between A and B, which is the parent.
-      mouseOut(aRef.current, parentRef.current);
-      assertLog(['fragment leave']);
-      mouseOut(parentRef.current, bRef.current);
-      assertLog(['fragment enter']);
+        mouseOver(aRef.current, null);
+        assertLog(['fragment enter']);
+        mouseOut(aRef.current, container);
+        assertLog([]);
+        mouseOut(container, bRef.current);
+        assertLog([]);
+        mouseOut(bRef.current, container);
+        mouseOut(container, document.body);
+        assertLog(['fragment leave']);
+      });
     });
 
     // @gate enableFragmentEventHandlers

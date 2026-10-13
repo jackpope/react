@@ -23,6 +23,8 @@ import {
   isContainerMarkedAsRoot,
 } from '../../client/ReactDOMComponentTree';
 import {accumulateEnterLeaveTwoPhaseListeners} from '../DOMPluginEventSystem';
+import {getFragmentGapTransition} from '../FragmentEnterLeaveGaps';
+import {enableFragmentEventHandlers} from 'shared/ReactFeatureFlags';
 
 import {
   HostComponent,
@@ -36,6 +38,13 @@ function registerEvents() {
   registerDirectEvent('onMouseLeave', ['mouseout', 'mouseover']);
   registerDirectEvent('onPointerEnter', ['pointerout', 'pointerover']);
   registerDirectEvent('onPointerLeave', ['pointerout', 'pointerover']);
+}
+
+// Related targets can be a Window, e.g. when the pointer moves into an iframe.
+function asNode(target: mixed): null | Node {
+  return target != null && typeof (target as any).nodeType === 'number'
+    ? (target as any)
+    : null;
 }
 
 /**
@@ -100,8 +109,11 @@ function extractEvents(
 
   let from;
   let to;
+  // The DOM node the pointer is now over.
+  let toDOMNode: null | Node;
   if (isOutEvent) {
     const related = nativeEvent.relatedTarget || (nativeEvent as any).toElement;
+    toDOMNode = asNode(related);
     from = targetInst;
     to = related ? getClosestInstanceFromNode(related as any) : null;
     if (to !== null) {
@@ -116,24 +128,44 @@ function extractEvents(
     }
   } else {
     // Moving to a node from outside the window.
+    toDOMNode = asNode(nativeEventTarget);
     from = null;
     to = targetInst;
-  }
-
-  if (from === to) {
-    // Nothing pertains to our managed components.
-    return;
   }
 
   let SyntheticEventCtor = SyntheticMouseEvent;
   let leaveEventType = 'onMouseLeave';
   let enterEventType = 'onMouseEnter';
   let eventTypePrefix = 'mouse';
+  let pointerKey = 'mouse';
   if (domEventName === 'pointerout' || domEventName === 'pointerover') {
     SyntheticEventCtor = SyntheticPointerEvent;
     leaveEventType = 'onPointerLeave';
     enterEventType = 'onPointerEnter';
     eventTypePrefix = 'pointer';
+    pointerKey = 'pointer:' + (nativeEvent as any).pointerId;
+  }
+
+  // We should only process this nativeEvent if we are processing
+  // the first ancestor. Next time, we will ignore the event.
+  const nativeTargetInst = getClosestInstanceFromNode(nativeEventTarget as any);
+  const isFirstAncestor = nativeTargetInst === targetInst;
+
+  let fragmentGaps = null;
+  if (enableFragmentEventHandlers && isFirstAncestor) {
+    fragmentGaps = getFragmentGapTransition(
+      pointerKey,
+      from,
+      to,
+      toDOMNode,
+      enterEventType,
+      leaveEventType,
+    );
+  }
+
+  if (from === to && fragmentGaps === null) {
+    // Nothing pertains to our managed components.
+    return;
   }
 
   const fromNode = from == null ? win : getNodeFromInstance(from);
@@ -151,10 +183,7 @@ function extractEvents(
 
   let enter: KnownReactSyntheticEvent | null = null;
 
-  // We should only process this nativeEvent if we are processing
-  // the first ancestor. Next time, we will ignore the event.
-  const nativeTargetInst = getClosestInstanceFromNode(nativeEventTarget as any);
-  if (nativeTargetInst === targetInst) {
+  if (isFirstAncestor) {
     const enterEvent: KnownReactSyntheticEvent = new SyntheticEventCtor(
       enterEventType,
       eventTypePrefix + 'enter',
@@ -167,7 +196,14 @@ function extractEvents(
     enter = enterEvent;
   }
 
-  accumulateEnterLeaveTwoPhaseListeners(dispatchQueue, leave, enter, from, to);
+  accumulateEnterLeaveTwoPhaseListeners(
+    dispatchQueue,
+    leave,
+    enter,
+    from,
+    to,
+    fragmentGaps,
+  );
 }
 
 export {registerEvents, extractEvents};
