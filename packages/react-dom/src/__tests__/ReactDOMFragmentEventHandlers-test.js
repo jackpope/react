@@ -1031,7 +1031,7 @@ describe('ReactDOMFragmentEventHandlers', () => {
       });
 
       // @gate enableFragmentEventHandlers
-      it('does not count the empty corner between diagonal children', async () => {
+      it('counts the empty corner between diagonal children as inside', async () => {
         const refs = createRefs();
         const root = ReactDOMClient.createRoot(container);
         await renderGapTree(root, refs);
@@ -1042,9 +1042,14 @@ describe('ReactDOMFragmentEventHandlers', () => {
 
         outAt(refs.outside.current, refs.a.current, ON_A);
         assertLog(['fragment enter target=a related=outside']);
-        // Right of A and above B, with no child on the other side.
+        // Right of A and above B, within the bounding box of both.
         outAt(refs.a.current, refs.parent.current, [170, 25]);
-        assertLog(['fragment leave target=a related=parent']);
+        assertLog([]);
+        outAt(refs.parent.current, refs.grandparent.current, [170, -10]);
+        assertLog([
+          'fragment leave target=parent related=grandparent',
+          'parent leave target=parent related=grandparent',
+        ]);
       });
 
       // @gate enableFragmentEventHandlers

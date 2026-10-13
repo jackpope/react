@@ -162,9 +162,8 @@ function collectChildRects(child: null | Fiber, rects: Array<Rect>): void {
   }
 }
 
-// The point is inside the Fragment if it's on one of the Fragment's host
-// nodes (e.g. its text, which can't be an event target), or if it lies
-// between two of them: one on each side, horizontally or vertically.
+// The point is inside the Fragment if it's within the bounding box of all of
+// the Fragment's host nodes.
 function isPointInFragment(
   instance: FragmentInstanceType,
   x: number,
@@ -172,38 +171,21 @@ function isPointInFragment(
 ): boolean {
   const rects: Array<Rect> = [];
   collectChildRects(instance._fragmentFiber.child, rects);
-  let left = false;
-  let right = false;
-  let above = false;
-  let below = false;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
   for (let i = 0; i < rects.length; i++) {
     const rect = rects[i];
     if (rect.right <= rect.left && rect.bottom <= rect.top) {
       continue;
     }
-    const inRow = y >= rect.top && y <= rect.bottom;
-    const inColumn = x >= rect.left && x <= rect.right;
-    if (inRow && inColumn) {
-      return true;
-    }
-    if (inRow) {
-      if (rect.right < x) {
-        left = true;
-      } else {
-        right = true;
-      }
-    } else if (inColumn) {
-      if (rect.bottom < y) {
-        above = true;
-      } else {
-        below = true;
-      }
-    }
-    if ((left && right) || (above && below)) {
-      return true;
-    }
+    minX = Math.min(minX, rect.left);
+    minY = Math.min(minY, rect.top);
+    maxX = Math.max(maxX, rect.right);
+    maxY = Math.max(maxY, rect.bottom);
   }
-  return false;
+  return x >= minX && x <= maxX && y >= minY && y <= maxY;
 }
 
 function hasEnterLeaveHandler(
