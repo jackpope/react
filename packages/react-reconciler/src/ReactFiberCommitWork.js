@@ -58,6 +58,7 @@ import {
   enableComponentPerformanceTrack,
   enableViewTransition,
   enableDefaultTransitionIndicator,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import {
   FunctionComponent,
@@ -256,6 +257,7 @@ import {
 import {
   commitFragmentInstanceDeletionEffects,
   commitFragmentInstanceInsertionEffects,
+  commitFragmentEventHandlers,
 } from './ReactFiberFragmentInstance';
 import {
   trackEnterViewTransitions,
@@ -854,6 +856,13 @@ function commitLayoutEffectOnFiber(
       break;
     }
     case Fragment:
+      if (
+        enableFragmentEventHandlers &&
+        flags & Update &&
+        finishedWork.stateNode === null
+      ) {
+        commitFragmentEventHandlers(finishedWork);
+      }
       if (flags & Ref) {
         safelyAttachRef(finishedWork, finishedWork.return);
       }
@@ -2726,6 +2735,13 @@ function commitMutationEffectsOnFiber(
       if (current && current.stateNode !== null) {
         updateFragmentInstanceFiber(finishedWork, current.stateNode);
       }
+      if (
+        enableFragmentEventHandlers &&
+        flags & Update &&
+        finishedWork.stateNode !== null
+      ) {
+        commitFragmentEventHandlers(finishedWork);
+      }
     // Fallthrough
     default: {
       recursivelyTraverseMutationEffects(root, finishedWork, lanes);
@@ -3483,6 +3499,9 @@ function reappearLayoutEffects(
       break;
     }
     case Fragment: {
+      if (enableFragmentEventHandlers && finishedWork.stateNode === null) {
+        commitFragmentEventHandlers(finishedWork);
+      }
       safelyAttachRef(finishedWork, finishedWork.return);
       // Fallthrough
     }

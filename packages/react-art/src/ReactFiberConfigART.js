@@ -328,6 +328,10 @@ export function updateFragmentInstanceFiber(fiber, instance): void {
   // Noop
 }
 
+export function updateFragmentInstanceEventHandlers(instance, props): void {
+  // Noop
+}
+
 export function commitNewChildToFragmentInstance(
   child,
   fragmentInstance,

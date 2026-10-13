@@ -894,6 +894,13 @@ export function updateFragmentInstanceFiber(
   instance._fragmentFiber = fragmentFiber;
 }
 
+export function updateFragmentInstanceEventHandlers(
+  instance: FragmentInstanceType,
+  props: null | {+[propKey: string]: mixed},
+): void {
+  // Fragment event handler props are not supported in React Native yet.
+}
+
 export function commitNewChildToFragmentInstance(
   childInstance: Instance | TextInstance,
   fragmentInstance: FragmentInstanceType,

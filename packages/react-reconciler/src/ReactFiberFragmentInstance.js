@@ -21,7 +21,39 @@ import {
   supportsSingletons,
   commitNewChildToFragmentInstance,
   deleteChildFromFragmentInstance,
+  createFragmentInstance,
+  updateFragmentInstanceEventHandlers,
 } from './ReactFiberConfig';
+import {getFragmentEventHandlerProps} from './ReactFiber';
+
+// Syncs a Fragment's committed event handler props to its FragmentInstance so
+// the event system can read them at dispatch time. A FragmentInstance is
+// created when the Fragment has handlers but no ref has created one yet.
+export function commitFragmentEventHandlers(finishedWork: Fiber): void {
+  const props = getFragmentEventHandlerProps(finishedWork);
+  const existingInstance: null | FragmentInstanceType = finishedWork.stateNode;
+  if (existingInstance !== null) {
+    updateFragmentInstanceEventHandlers(existingInstance, props);
+    return;
+  }
+  if (props === null) {
+    return;
+  }
+  // Some renderers don't support FragmentInstances and return null here.
+  const instance: null | FragmentInstanceType =
+    createFragmentInstance(finishedWork);
+  if (instance === null) {
+    return;
+  }
+  finishedWork.stateNode = instance;
+  // Events are dispatched by walking up from a host node's Fiber, which may be
+  // either version of the Fragment, so both need the instance.
+  const alternate = finishedWork.alternate;
+  if (alternate !== null) {
+    alternate.stateNode = instance;
+  }
+  updateFragmentInstanceEventHandlers(instance, props);
+}
 
 export function commitNewChildToFragmentInstances(
   fiber: Fiber,

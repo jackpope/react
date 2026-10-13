@@ -534,6 +534,10 @@ function createReactNoop(
       // Noop
     },
 
+    updateFragmentInstanceEventHandlers(fragmentInstance: mixed, props: mixed) {
+      // Noop
+    },
+
     commitNewChildToFragmentInstance(child: mixed, fragmentInstance: mixed) {
       // Noop
     },

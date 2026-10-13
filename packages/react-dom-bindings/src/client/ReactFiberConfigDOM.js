@@ -2995,6 +2995,8 @@ export type FragmentInstanceType = {
   _fragmentFiber: Fiber,
   _eventListeners: null | Array<StoredEventListener>,
   _observers: null | Set<IntersectionObserver | ResizeObserver>,
+  // The committed `on*` props of the Fragment, read by the event system.
+  _eventHandlerProps: null | {+[propKey: string]: mixed},
   addEventListener(
     type: string,
     listener: EventListener,
@@ -3023,6 +3025,7 @@ function FragmentInstance(this: FragmentInstanceType, fragmentFiber: Fiber) {
   this._fragmentFiber = fragmentFiber;
   this._eventListeners = null;
   this._observers = null;
+  this._eventHandlerProps = null;
 }
 
 // $FlowFixMe[prop-missing]
@@ -3872,6 +3875,13 @@ export function updateFragmentInstanceFiber(
   instance: FragmentInstanceType,
 ): void {
   instance._fragmentFiber = fragmentFiber;
+}
+
+export function updateFragmentInstanceEventHandlers(
+  instance: FragmentInstanceType,
+  props: null | {+[propKey: string]: mixed},
+): void {
+  instance._eventHandlerProps = props;
 }
 
 export function commitNewChildToFragmentInstance(
