@@ -7,7 +7,7 @@
  */
 
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
-import type {Props} from '../client/ReactFiberConfigDOM';
+import type {Props, FragmentInstanceType} from '../client/ReactFiberConfigDOM';
 
 import {getFiberCurrentPropsFromNode} from '../client/ReactDOMComponentTree';
 
@@ -75,4 +75,21 @@ export default function getListener(
   }
 
   return listener;
+}
+
+export function getFragmentListener(
+  fragmentInstance: FragmentInstanceType,
+  registrationName: string,
+): Function | null {
+  const props = fragmentInstance._eventHandlerProps;
+  if (props === null) {
+    return null;
+  }
+  const listener = props[registrationName];
+  if (listener && typeof listener !== 'function') {
+    throw new Error(
+      `Expected \`${registrationName}\` listener to be a function, instead got a value of \`${typeof listener}\` type.`,
+    );
+  }
+  return listener ? (listener as any) : null;
 }

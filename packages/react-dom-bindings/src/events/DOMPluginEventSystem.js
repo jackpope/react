@@ -35,6 +35,7 @@ import {
   HostSingleton,
   HostText,
   ScopeComponent,
+  Fragment,
 } from 'react-reconciler/src/ReactWorkTags';
 import {getLowestCommonAncestor} from 'react-reconciler/src/ReactFiberTreeReflection';
 
@@ -46,7 +47,7 @@ import {
 } from '../client/ReactDOMComponentTree';
 import {COMMENT_NODE, DOCUMENT_NODE} from '../client/HTMLNodeType';
 import {batchedUpdates} from './ReactDOMUpdateBatching';
-import getListener from './getListener';
+import getListener, {getFragmentListener} from './getListener';
 import {passiveBrowserEventsSupported} from './checkPassiveEvents';
 
 import {
@@ -55,6 +56,7 @@ import {
   enableScopeAPI,
   disableCommentsAsDOMContainers,
   enableScrollEndPolyfill,
+  enableFragmentEventHandlers,
 } from 'shared/ReactFeatureFlags';
 import {createEventListenerWrapperWithPriority} from './ReactDOMEventListener';
 import {
@@ -253,10 +255,20 @@ function executeDispatch(
   event: ReactSyntheticEvent,
   listener: Function,
   currentTarget: EventTarget,
+  instance: null | Fiber,
 ): void {
   event.currentTarget = currentTarget;
   try {
-    listener(event);
+    if (
+      enableFragmentEventHandlers &&
+      instance !== null &&
+      instance.tag === Fragment
+    ) {
+      // Fragment handlers are called with their FragmentInstance as `this`.
+      listener.call(currentTarget, event);
+    } else {
+      listener(event);
+    }
   } catch (error) {
     reportGlobalError(error);
   }
@@ -282,9 +294,10 @@ function processDispatchQueueItemsInOrder(
           event,
           listener,
           currentTarget,
+          instance,
         );
       } else {
-        executeDispatch(event, listener, currentTarget);
+        executeDispatch(event, listener, currentTarget, instance);
       }
       previousInstance = instance;
     }
@@ -301,9 +314,10 @@ function processDispatchQueueItemsInOrder(
           event,
           listener,
           currentTarget,
+          instance,
         );
       } else {
-        executeDispatch(event, listener, currentTarget);
+        executeDispatch(event, listener, currentTarget, instance);
       }
       previousInstance = instance;
     }
@@ -799,6 +813,19 @@ export function accumulateSinglePhaseListeners(
           }
         });
       }
+    } else if (
+      enableFragmentEventHandlers &&
+      tag === Fragment &&
+      stateNode !== null &&
+      reactEventName !== null
+    ) {
+      // Fragment on* props. The FragmentInstance is the currentTarget.
+      const listener = getFragmentListener(stateNode, reactEventName);
+      if (listener !== null) {
+        listeners.push(
+          createDispatchListener(instance, listener, stateNode as any),
+        );
+      }
     }
     // If we are only accumulating events for the target, then we don't
     // continue to propagate through the React fiber tree to find other
@@ -867,6 +894,24 @@ export function accumulateTwoPhaseListeners(
           createDispatchListener(instance, bubbleListener, currentTarget),
         );
       }
+    } else if (
+      enableFragmentEventHandlers &&
+      tag === Fragment &&
+      stateNode !== null
+    ) {
+      const currentTarget: EventTarget = stateNode as any;
+      const captureListener = getFragmentListener(stateNode, captureName);
+      if (captureListener !== null) {
+        listeners.unshift(
+          createDispatchListener(instance, captureListener, currentTarget),
+        );
+      }
+      const bubbleListener = getFragmentListener(stateNode, reactName);
+      if (bubbleListener !== null) {
+        listeners.push(
+          createDispatchListener(instance, bubbleListener, currentTarget),
+        );
+      }
     }
     if (instance.tag === HostRoot) {
       return listeners;
@@ -890,11 +935,28 @@ function getParent(inst: Fiber | null): Fiber | null {
     // events to their parent. We could also go through parentNode on the
     // host node but that wouldn't work for React Native and doesn't let us
     // do the portal feature.
-  } while (inst && inst.tag !== HostComponent && inst.tag !== HostSingleton);
+  } while (
+    inst &&
+    inst.tag !== HostComponent &&
+    inst.tag !== HostSingleton &&
+    !isFragmentEnterLeaveBoundary(inst)
+  );
   if (inst) {
     return inst;
   }
   return null;
+}
+
+// Fragments with a FragmentInstance act like a parent element for enter/leave:
+// treating them as ancestors means the lowest common ancestor of two of the
+// Fragment's own host nodes is the Fragment (or lower), so it doesn't receive
+// enter/leave when the pointer moves between them.
+function isFragmentEnterLeaveBoundary(inst: Fiber): boolean {
+  return (
+    enableFragmentEventHandlers &&
+    inst.tag === Fragment &&
+    inst.stateNode !== null
+  );
 }
 
 function accumulateEnterLeaveListenersForEvent(
@@ -937,6 +999,26 @@ function accumulateEnterLeaveListenersForEvent(
           listeners.push(
             createDispatchListener(instance, bubbleListener, currentTarget),
           );
+        }
+      }
+    } else if (
+      enableFragmentEventHandlers &&
+      tag === Fragment &&
+      stateNode !== null
+    ) {
+      // Fragments are part of the getParent() path, so moving between two
+      // host nodes inside the same Fragment never reaches it here.
+      const listener = getFragmentListener(stateNode, registrationName);
+      if (listener !== null) {
+        const dispatchListener = createDispatchListener(
+          instance,
+          listener,
+          stateNode as any,
+        );
+        if (inCapturePhase) {
+          listeners.unshift(dispatchListener);
+        } else {
+          listeners.push(dispatchListener);
         }
       }
     }
