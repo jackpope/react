@@ -140,6 +140,7 @@ import {
   HostSingleton,
 } from 'react-reconciler/src/ReactWorkTags';
 import {listenToAllSupportedEvents} from '../events/DOMPluginEventSystem';
+import {updateFragmentEnterLeaveRegistration} from '../events/FragmentEnterLeaveGaps';
 import {validateLinkPropsForStyleResource} from '../shared/ReactDOMResourceValidation';
 import escapeSelectorAttributeValueInsideDoubleQuotes from './escapeSelectorAttributeValueInsideDoubleQuotes';
 import {flushSyncWork as flushSyncWorkOnAllRoots} from 'react-reconciler/src/ReactFiberWorkLoop';
@@ -3882,6 +3883,7 @@ export function updateFragmentInstanceEventHandlers(
   props: null | {+[propKey: string]: mixed},
 ): void {
   instance._eventHandlerProps = props;
+  updateFragmentEnterLeaveRegistration(instance, props);
 }
 
 export function commitNewChildToFragmentInstance(

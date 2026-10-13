@@ -15,6 +15,8 @@ import type {
   ReactSyntheticEvent,
 } from './ReactSyntheticEventType';
 import type {Fiber} from 'react-reconciler/src/ReactInternalTypes';
+import type {FragmentInstanceType} from '../client/ReactFiberConfigDOM';
+import type {FragmentGapTransition} from './FragmentEnterLeaveGaps';
 
 import {allNativeEvents} from './EventRegistry';
 import {
@@ -962,9 +964,11 @@ function isFragmentEnterLeaveBoundary(inst: Fiber): boolean {
 function accumulateEnterLeaveListenersForEvent(
   dispatchQueue: DispatchQueue,
   event: KnownReactSyntheticEvent,
-  target: Fiber,
+  target: Fiber | null,
   common: Fiber | null,
   inCapturePhase: boolean,
+  skipFragments: null | Set<FragmentInstanceType>,
+  extraFragments: null | Array<FragmentInstanceType>,
 ): void {
   const registrationName = event._reactName;
   const listeners: Array<DispatchListener> = [];
@@ -1004,7 +1008,8 @@ function accumulateEnterLeaveListenersForEvent(
     } else if (
       enableFragmentEventHandlers &&
       tag === Fragment &&
-      stateNode !== null
+      stateNode !== null &&
+      (skipFragments === null || !skipFragments.has(stateNode))
     ) {
       // Fragments are part of the getParent() path, so moving between two
       // host nodes inside the same Fragment never reaches it here.
@@ -1024,6 +1029,29 @@ function accumulateEnterLeaveListenersForEvent(
     }
     instance = instance.return;
   }
+  if (extraFragments !== null) {
+    // These Fragments are the pointer's innermost boundaries: their leave
+    // fires before any host node's, and their enter after.
+    const extraListeners: Array<DispatchListener> = [];
+    for (let i = 0; i < extraFragments.length; i++) {
+      const fragmentInstance = extraFragments[i];
+      const listener = getFragmentListener(fragmentInstance, registrationName);
+      if (listener !== null) {
+        extraListeners.push(
+          createDispatchListener(
+            fragmentInstance._fragmentFiber,
+            listener,
+            fragmentInstance as any,
+          ),
+        );
+      }
+    }
+    if (inCapturePhase) {
+      listeners.push(...extraListeners);
+    } else {
+      listeners.unshift(...extraListeners);
+    }
+  }
   if (listeners.length !== 0) {
     dispatchQueue.push({event, listeners});
   }
@@ -1040,26 +1068,33 @@ export function accumulateEnterLeaveTwoPhaseListeners(
   enterEvent: null | KnownReactSyntheticEvent,
   from: Fiber | null,
   to: Fiber | null,
+  fragmentGaps: null | FragmentGapTransition,
 ): void {
   const common =
     from && to ? getLowestCommonAncestor(from, to, getParent) : null;
 
-  if (from !== null) {
+  const extraLeave = fragmentGaps !== null ? fragmentGaps.extraLeave : null;
+  if (from !== null || extraLeave !== null) {
     accumulateEnterLeaveListenersForEvent(
       dispatchQueue,
       leaveEvent,
       from,
       common,
       false,
+      fragmentGaps !== null ? fragmentGaps.stillInside : null,
+      extraLeave,
     );
   }
-  if (to !== null && enterEvent !== null) {
+  const extraEnter = fragmentGaps !== null ? fragmentGaps.extraEnter : null;
+  if ((to !== null || extraEnter !== null) && enterEvent !== null) {
     accumulateEnterLeaveListenersForEvent(
       dispatchQueue,
       enterEvent,
       to,
       common,
       true,
+      fragmentGaps !== null ? fragmentGaps.alreadyInside : null,
+      extraEnter,
     );
   }
 }

@@ -258,6 +258,7 @@ import {
   commitFragmentInstanceDeletionEffects,
   commitFragmentInstanceInsertionEffects,
   commitFragmentEventHandlers,
+  commitFragmentEventHandlersDeletion,
 } from './ReactFiberFragmentInstance';
 import {
   trackEnterViewTransitions,
@@ -1775,6 +1776,9 @@ function commitDeletionEffectsOnFiber(
       // Fallthrough
     }
     case Fragment: {
+      if (enableFragmentEventHandlers && deletedFiber.tag === Fragment) {
+        commitFragmentEventHandlersDeletion(deletedFiber);
+      }
       if (!offscreenSubtreeWasHidden) {
         safelyDetachRef(deletedFiber, nearestMountedAncestor);
       }

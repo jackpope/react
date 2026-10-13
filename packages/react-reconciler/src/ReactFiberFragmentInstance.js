@@ -55,6 +55,13 @@ export function commitFragmentEventHandlers(finishedWork: Fiber): void {
   updateFragmentInstanceEventHandlers(instance, props);
 }
 
+export function commitFragmentEventHandlersDeletion(deletedFiber: Fiber): void {
+  const instance: null | FragmentInstanceType = deletedFiber.stateNode;
+  if (instance !== null) {
+    updateFragmentInstanceEventHandlers(instance, null);
+  }
+}
+
 export function commitNewChildToFragmentInstances(
   fiber: Fiber,
   parentFragmentInstances: null | Array<FragmentInstanceType>,
