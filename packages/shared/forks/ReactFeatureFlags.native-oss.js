@@ -71,6 +71,7 @@ export const enableDefaultTransitionIndicator: boolean = false;
 export const ownerStackLimit = 1e4;
 
 export const enableInternalInstanceMap: boolean = false;
+export const enableFragmentEventHandlers: boolean = false;
 
 export const enableOptimisticKey: boolean = false;
 

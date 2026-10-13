@@ -79,6 +79,7 @@ export const enableComponentPerformanceTrack: boolean = true;
 export const enablePerformanceIssueReporting: boolean =
   enableComponentPerformanceTrack;
 export const enableInternalInstanceMap: boolean = false;
+export const enableFragmentEventHandlers: boolean = false;
 export const enableOptimisticKey: boolean = false;
 
 export const eprh_enableUseKeyedStateCompilerLint: boolean = false;

@@ -165,6 +165,9 @@ export const enableConditionalUseWarning: boolean = true;
 
 export const enableInternalInstanceMap: boolean = false;
 
+// Allow `on*` event handler props on <Fragment> in React DOM.
+export const enableFragmentEventHandlers: boolean = __EXPERIMENTAL__;
+
 // -----------------------------------------------------------------------------
 // Ready for next major.
 //
