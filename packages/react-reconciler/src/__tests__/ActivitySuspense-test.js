@@ -11,6 +11,7 @@ let startTransition;
 let textCache;
 let waitFor;
 let waitForPaint;
+let waitForMicrotasks;
 let assertLog;
 let use;
 
@@ -33,6 +34,7 @@ describe('Activity Suspense', () => {
     const InternalTestUtils = require('internal-test-utils');
     waitFor = InternalTestUtils.waitFor;
     waitForPaint = InternalTestUtils.waitForPaint;
+    waitForMicrotasks = InternalTestUtils.waitForMicrotasks;
     assertLog = InternalTestUtils.assertLog;
 
     textCache = new Map();
@@ -488,9 +490,11 @@ describe('Activity Suspense', () => {
     expect(root).toMatchRenderedOutput(<span>Visible</span>);
 
     // The retry listener attached to the deleted Offscreen boundary still
-    // fires when the data resolves.
+    // fires when the data resolves. It should not schedule any work.
     await act(async () => {
-      await resolveText('Hidden');
+      resolveText('Hidden');
+      await waitForMicrotasks();
+      expect(Scheduler.unstable_hasPendingWork()).toBe(false);
     });
     assertLog([]);
     expect(root).toMatchRenderedOutput(<span>Visible</span>);
